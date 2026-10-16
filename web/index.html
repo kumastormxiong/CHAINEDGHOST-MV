@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>CHAINEDGHOST</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  html,body{margin:0;height:100%;background:#000;overflow:hidden;color:#bff;font:13px/1.5 "Yu Gothic UI","Microsoft YaHei",sans-serif}
+  #stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#000}
+  #stage canvas{width:min(100vw,calc(100vh*16/9));height:auto;display:block}
+  body.still #ui,body.still #start{display:none}
+  #start{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:rgba(3,0,10,.86);z-index:5;cursor:pointer;letter-spacing:.3em;color:#ff7ad0}
+  #start b{font:800 italic 54px "Exo2",sans-serif;color:#fff;text-shadow:0 0 18px #ff2f8f,0 0 40px #3ff6ff;letter-spacing:.12em}
+  #ui{position:fixed;left:0;right:0;bottom:0;padding:10px 18px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:linear-gradient(transparent,rgba(0,0,0,.75));z-index:4;transition:opacity .4s}
+  #ui.hide{opacity:0;pointer-events:none}
+  #ui button{background:#150826;color:#8ff;border:1px solid #3ff6ff88;border-radius:3px;padding:4px 10px;cursor:pointer}
+  #ui button:hover{background:#2a0b4a}
+  #ui input[type=range]{flex:1;min-width:240px;accent-color:#ff2f8f}
+  #info{opacity:.75;font-variant-numeric:tabular-nums}
+  #secs{display:flex;gap:6px;flex-wrap:wrap;width:100%}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div id="start"><b>GHOSTCHAIN</b><span>点击开始 / CLICK TO START</span></div>
+<div id="ui" class="hide">
+  <button id="bPlay">播放/暂停</button>
+  <input id="seek" type="range" min="0" max="240" step="0.01" value="0">
+  <span id="info">0:00</span>
+  <button id="bRec" title="按 R 键也可以">● 录制成 mp4/webm</button>
+  <button id="bHud">HUD</button>
+  <button id="bTap" title="播放时按空格标记段落起点">打点模式</button>
+  <div id="secs"></div>
+</div>
+<script type="importmap">
+{"imports":{"three":"./node_modules/three/build/three.module.js","three/addons/":"./node_modules/three/examples/jsm/"}}
+</script>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>

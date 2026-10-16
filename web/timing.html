@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GhostChain 逐字打点</title>
+<style>
+:root{color-scheme:dark}
+body{margin:0;background:#07020f;color:#e6fbff;font:14px/1.5 "Microsoft YaHei",system-ui,sans-serif}
+header{position:sticky;top:0;z-index:5;background:#120624f2;padding:10px 14px;border-bottom:1px solid #3ff6ff55}
+button,input,select{font:inherit}
+button{background:#150826;color:#8ff;border:1px solid #3ff6ff88;border-radius:4px;padding:5px 10px;cursor:pointer;margin:2px}
+button:hover{background:#2a0b4a}
+button.hot{background:#ff2f8f;color:#fff;border-color:#ff2f8f}
+#cur{font:900 46px/1.1 "Yu Gothic","Meiryo",sans-serif;color:#ffd6ef;min-height:52px;margin-top:6px}
+#cur small{font:13px system-ui;color:#9ab;margin-left:10px}
+#bar{height:6px;background:#2a0b4a;border-radius:3px;margin:8px 0;overflow:hidden}
+#bar i{display:block;height:100%;background:#3ff6ff;width:0}
+#help{color:#9ab;font-size:12px;margin-top:4px}
+main{padding:8px 14px 160px}
+h3{color:#7ff9ff;margin:20px 0 6px;font-size:15px;border-bottom:1px dashed #3ff6ff33;padding-bottom:4px}
+.row{margin:4px 0 8px}
+.ch{display:inline-block;min-width:40px;text-align:center;margin:3px 2px;padding:4px 2px 3px;border:1px solid #3ff6ff33;border-radius:5px;font:800 22px "Yu Gothic","Meiryo",sans-serif;cursor:pointer;user-select:none;vertical-align:top}
+.ch small{display:block;font:11px Consolas,monospace;color:#56657a;line-height:1.1}
+.ch.done{border-color:#ff8fd0aa;color:#ffd6ef}
+.ch.done small{color:#ffb0dc}
+.ch.cur{background:#ff2f8f;color:#fff;border-color:#fff}
+.ch.cur small{color:#fff}
+#status{margin-left:8px;color:#9ab}
+</style></head>
+<body>
+<header>
+  <audio id="au" src="audio/GhostChain.wav" preload="auto"></audio>
+  <button id="play">播放 / 暂停 · 空格</button>
+  速度 <input id="rate" type="range" min="30" max="100" step="5" value="50" style="vertical-align:middle;width:180px"> <b id="rateV">50%</b>
+  &nbsp; <span id="pos">0.00s</span> / <span id="dur">--</span>
+  <br>
+  <button id="tap" class="hot">打点 · Enter</button>
+  <button id="undo">撤销 · Backspace</button>
+  <button id="back">回听前 1 秒 · G</button>
+  <button id="save">保存</button>
+  <button id="export">导出 JSON</button>
+  <span id="status"></span>
+  <div id="cur"></div>
+  <div id="bar"><i></i></div>
+  <div id="help">Enter 给当前字打点并跳到下一字 · ↑↓ 移动光标（不打点） · ←→ 前后 2 秒（按 Shift 为 0.3 秒） · [ ] 速度 ±5% · 点字可直接定位 · 每次打点约 1 秒后自动保存</div>
+</header>
+<main id="list"></main>
+<script type="module">
+import { Timeline } from './src/timeline.js';
+
+const $ = (id) => document.getElementById(id);
+const au = $('au');
+const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+
+const tl = await Timeline.load();
+// 读取已保存的结果（含"已打点"状态）
+let saved = {}, doneSet = new Set();
+try {
+  const r = await fetch('/api/timing');
+  if (r.ok) { const j = await r.json(); saved = j.times || {}; doneSet = new Set(j.done || []); }
+} catch (e) { /* 没有服务时（直接打开文件）只能用本地缓存 */ }
+if (!Object.keys(saved).length) {
+  try { const j = JSON.parse(localStorage.getItem('ghostchain_char_times') || 'null'); if (j) { saved = j.times || {}; doneSet = new Set(j.done || []); } } catch (e) {}
+}
+
+// 把所有要打点的字排成一列（顺序与播放时完全一致：timeline.rowsFor 共用）
+const E = [];
+for (const sec of tl.sections) {
+  const rows = tl.rowsFor(sec);
+  if (!rows.length) continue;
+  const n = rows.reduce((a, r) => a + r.length, 0);
+  let idx = 0;
+  rows.forEach((r, ri) => r.forEach((ch, ci) => {
+    const key = `${sec.id}:${ri}:${ci}`;
+    const def = (sec.lines && sec.lines[ri]) ? (sec.lines[ri][0] + (sec.lines[ri][1] - sec.lines[ri][0]) * ci / r.length) : sec.start + (sec.end - sec.start) * idx / Math.max(1, n);
+    idx++;
+    E.push({ key, sec, ri, ch, def, t: key in saved ? saved[key] : def, done: doneSet.has(key) });
+  }));
+}
+
+const list = $('list'); const spans = []; let cur = 0, rate = 50, saveTimer = 0;
+let lastSec = null, lastRow = null, rowDiv = null;
+E.forEach((e, i) => {
+  if (e.sec !== lastSec) {
+    lastSec = e.sec; lastRow = null;
+    const h = document.createElement('h3'); h.textContent = `${e.sec.name}   ${e.sec.start.toFixed(2)}s – ${e.sec.end.toFixed(2)}s`; list.appendChild(h);
+  }
+  if (e.ri !== lastRow) { lastRow = e.ri; rowDiv = document.createElement('div'); rowDiv.className = 'row'; list.appendChild(rowDiv); }
+  const s = document.createElement('span'); s.className = 'ch';
+  s.innerHTML = `${e.ch}<small></small>`;
+  s.onclick = () => { cur = i; refresh(); au.currentTime = Math.max(0, e.t - 0.3); };
+  rowDiv.appendChild(s); spans.push(s);
+});
+
+function refresh() {
+  E.forEach((e, i) => {
+    const s = spans[i];
+    s.className = 'ch' + (e.done ? ' done' : '') + (i === cur ? ' cur' : '');
+    s.querySelector('small').textContent = e.done ? e.t.toFixed(2) : e.def.toFixed(1);
+  });
+  const e = E[cur];
+  $('cur').innerHTML = e ? `${e.ch}<small>${e.sec.name} · ${e.t.toFixed(2)}s · 第 ${cur + 1} / ${E.length} 字 · 已打点 ${E.filter(x => x.done).length}</small>` : '';
+}
+function scrollCur() { const s = spans[cur]; if (s) s.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+
+function scheduleSave(msg) {
+  $('status').textContent = '未保存…';
+  clearTimeout(saveTimer); saveTimer = setTimeout(save, 1000);
+}
+async function save() {
+  const times = {}, done = [];
+  E.forEach((e) => { times[e.key] = +e.t.toFixed(3); if (e.done) done.push(e.key); });
+  const payload = { version: 1, song: 'GhostChain', updated: new Date().toISOString(), times, done };
+  try { localStorage.setItem('ghostchain_char_times', JSON.stringify({ times, done })); } catch (e) {}
+  try {
+    const r = await fetch('/api/timing', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    const j = await r.json();
+    $('status').textContent = j.ok ? `已保存 ${new Date().toLocaleTimeString()}（${done.length}/${E.length} 字已打点）` : '保存失败：' + j.error;
+  } catch (e) {
+    $('status').textContent = '没有连接到本地服务（请用 play_MV.bat 启动），已存入浏览器缓存';
+  }
+}
+
+function tap() {
+  const e = E[cur];
+  e.t = +au.currentTime.toFixed(3); e.done = true;
+  if (cur < E.length - 1) cur++;
+  refresh(); scrollCur(); scheduleSave();
+}
+function undo() {
+  if (cur > 0) cur--;
+  const e = E[cur]; e.done = false; e.t = e.def;
+  refresh(); scrollCur(); scheduleSave();
+}
+function move(d) { cur = clamp(cur + d, 0, E.length - 1); refresh(); scrollCur(); }
+function back() { const e = E[cur]; au.currentTime = Math.max(0, e.t - 1); au.play(); }
+function setRate(v) {
+  rate = clamp(Math.round(v / 5) * 5, 30, 100);
+  au.playbackRate = rate / 100; au.preservesPitch = true; au.webkitPreservesPitch = true;
+  $('rate').value = rate; $('rateV').textContent = rate + '%';
+}
+function togglePlay() { au.paused ? au.play() : au.pause(); }
+
+$('play').onclick = togglePlay;
+$('tap').onclick = tap;
+$('undo').onclick = undo;
+$('back').onclick = back;
+$('save').onclick = save;
+$('rate').oninput = (ev) => setRate(+ev.target.value);
+$('export').onclick = () => {
+  const times = {}; E.forEach((e) => { times[e.key] = +e.t.toFixed(3); });
+  const blob = new Blob([JSON.stringify({ version: 1, song: 'GhostChain', times }, null, 1)], { type: 'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'char_times.json'; a.click();
+};
+
+addEventListener('keydown', (ev) => {
+  if (ev.target.tagName === 'INPUT') return;
+  switch (ev.code) {
+    case 'Space': ev.preventDefault(); togglePlay(); break;
+    case 'Enter': ev.preventDefault(); tap(); break;
+    case 'Backspace': ev.preventDefault(); undo(); break;
+    case 'ArrowLeft': ev.preventDefault(); au.currentTime = Math.max(0, au.currentTime - (ev.shiftKey ? 0.3 : 2)); break;
+    case 'ArrowRight': ev.preventDefault(); au.currentTime = Math.min(au.duration || 1e9, au.currentTime + (ev.shiftKey ? 0.3 : 2)); break;
+    case 'ArrowUp': ev.preventDefault(); move(-1); break;
+    case 'ArrowDown': ev.preventDefault(); move(1); break;
+    case 'KeyG': back(); break;
+    case 'BracketLeft': setRate(rate - 5); break;
+    case 'BracketRight': setRate(rate + 5); break;
+  }
+});
+
+function loop() {
+  $('pos').textContent = au.currentTime.toFixed(2) + 's';
+  $('dur').textContent = isFinite(au.duration) ? au.duration.toFixed(2) + 's' : '--';
+  $('bar').firstElementChild.style.width = (isFinite(au.duration) ? au.currentTime / au.duration * 100 : 0) + '%';
+  requestAnimationFrame(loop);
+}
+setRate(50); refresh(); loop();
+$('status').textContent = `已加载 ${E.length} 个字，已打点 ${E.filter(x => x.done).length} 个。从第 1 个字开始；空格播放，Enter 打点。`;
+</script>
+</body></html>

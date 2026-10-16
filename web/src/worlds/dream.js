@@ -1,0 +1,102 @@
+// 场景 dream：Bridge。梦核/液态蒸汽波：粉橙天空、镜面水面、巨大落日、漂浮的幽灵及其倒影、老式系统窗口、悬浮锁链与假名花瓣。
+import * as THREE from 'three';
+import { PAL, col, KANA, JP_FONT, makeSun, makeSky, makeGhost, glyphMesh, glowSprite, smooth, clamp, lerp, rng, makeStars } from '../lib.js';
+import { makeChain } from '../lib.js';
+import { makeCyberField } from '../cyber.js';
+
+const SKY = { top: 0x07122e, mid: 0xc23a78, hor: 0xffb08a, midAt: 0.34, pw: 0.6 };
+
+function winTexture(title, lines, prog) {
+  const W = 640, H = 360, cv = document.createElement('canvas'); cv.width = W; cv.height = H; const g = cv.getContext('2d');
+  g.fillStyle = '#c3c3cf'; g.fillRect(0, 0, W, H);
+  g.fillStyle = '#fff'; g.fillRect(0, 0, W, 3); g.fillRect(0, 0, 3, H); g.fillStyle = '#6a6a78'; g.fillRect(0, H - 3, W, 3); g.fillRect(W - 3, 0, 3, H);
+  const gr = g.createLinearGradient(0, 0, W, 0); gr.addColorStop(0, '#1b1b7a'); gr.addColorStop(1, '#2fa0d8'); g.fillStyle = gr; g.fillRect(8, 8, W - 16, 38);
+  g.fillStyle = '#fff'; g.font = `bold 24px ${JP_FONT}`; g.textBaseline = 'middle'; g.fillText(title, 20, 28);
+  g.fillStyle = '#c3c3cf'; g.fillRect(W - 44, 14, 26, 26); g.fillStyle = '#000'; g.font = 'bold 20px sans-serif'; g.fillText('×', W - 38, 28);
+  g.fillStyle = '#10101a'; g.font = `22px ${JP_FONT}`; lines.forEach((l, i) => g.fillText(l, 28, 90 + i * 36));
+  g.fillStyle = '#fff'; g.fillRect(28, H - 110, W - 56, 34); g.strokeStyle = '#6a6a78'; g.lineWidth = 2; g.strokeRect(28, H - 110, W - 56, 34);
+  const n = Math.floor(prog * 22); g.fillStyle = '#2b2bb5'; for (let i = 0; i < n; i++) g.fillRect(34 + i * 25.2, H - 105, 20, 24);
+  g.fillStyle = '#c3c3cf'; g.fillRect(W - 170, H - 60, 140, 40); g.strokeStyle = '#6a6a78'; g.strokeRect(W - 170, H - 60, 140, 40); g.fillStyle = '#000'; g.font = `20px ${JP_FONT}`; g.fillText('キャンセル', W - 148, H - 40);
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; return { tex, cv, g };
+}
+
+export function create(ctx) {
+  const scene = new THREE.Scene(); scene.background = col(SKY.hor);
+  const camera = new THREE.PerspectiveCamera(58, 16 / 9, 0.1, 900);
+  const sky = makeSky(SKY.top, SKY.mid, SKY.hor, { midAt: SKY.midAt, power: SKY.pw }); scene.add(sky);
+  scene.add(makeStars(500, 380, 1.3, 61));
+
+  const sun = makeSun(30, 0.8); sun.position.set(0, 20, -170); scene.add(sun);
+  const sunGlow = glowSprite('255,190,150', 380, 0.8); sunGlow.position.set(0, 20, -172); scene.add(sunGlow);
+
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(1400, 1400), new THREE.ShaderMaterial({
+    uniforms: { uTime: { value: 0 }, uCam: { value: new THREE.Vector3() }, uTop: { value: col(SKY.top) }, uMid: { value: col(SKY.mid) }, uHor: { value: col(SKY.hor) } },
+    vertexShader: 'varying vec3 vP;void main(){vec4 w=modelMatrix*vec4(position,1.);vP=w.xyz;gl_Position=projectionMatrix*viewMatrix*w;}',
+    fragmentShader: `uniform float uTime;uniform vec3 uCam,uTop,uMid,uHor;varying vec3 vP;
+      float gl(vec2 p,float w){vec2 g=abs(fract(p-0.5)-0.5)/fwidth(p);return 1.0-clamp(min(g.x,g.y)/w,0.,1.);}
+      vec3 skyc(vec3 r){ float y=max(r.y,0.0); y=pow(y,${SKY.pw.toFixed(2)}); vec3 c=mix(uHor,uMid,smoothstep(0.0,${SKY.midAt.toFixed(2)},y)); return mix(c,uTop,smoothstep(${SKY.midAt.toFixed(2)},0.9,y)); }
+      void main(){
+        vec3 d=normalize(vP-uCam); float dist=length(vP-uCam);
+        float w1=sin(vP.x*0.55+uTime*0.9)*0.5+sin(vP.z*0.8-uTime*1.2)*0.5; float w2=sin(vP.x*2.3-uTime*1.7+vP.z*0.4);
+        vec3 r=vec3(d.x+w1*0.012,-d.y+(w1*0.01+w2*0.004),d.z);
+        vec3 c=skyc(normalize(r))*0.78;
+        float gx=exp(-pow((vP.x)/(9.0+dist*0.05),2.0));
+        float st=smoothstep(0.35,0.85,sin(vP.z*1.1+uTime*0.9+sin(vP.x*0.6)*2.0)*0.5+0.5);
+        c+=vec3(1.0,0.78,0.58)*gx*st*0.65*smoothstep(500.0,60.0,dist);
+        c+=vec3(1.0,0.35,0.7)*gl(vec2(vP.x,vP.z)/6.0,1.4)*0.09*smoothstep(260.0,20.0,dist);
+        c=mix(c,uHor,smoothstep(120.0,700.0,dist));
+        gl_FragColor=vec4(c,1.0);}`
+  })); water.rotation.x = -Math.PI / 2; scene.add(water);
+
+  const ghost = makeGhost(ctx.girlTex, 25); ghost.position.set(-10, 13.2, -24); ghost.visible = false; scene.add(ghost);
+  const mirror = makeGhost(ctx.girlTex, 25); mirror.scale.y = -1; mirror.position.set(-10, -13.2, -24); mirror.material.uniforms.uFade.value = 0.34; mirror.visible = false; scene.add(mirror);
+  const halo = makeChain(110, ctx.env); scene.add(halo.mesh);
+  const hang = makeChain(120, ctx.env); scene.add(hang.mesh);
+  const cf = makeCyberField({ n: 30, codes: 6, box: [50, 30, 160], seed: 31 }); scene.add(cf.group);
+  scene.add(new THREE.AmbientLight(0xffddee, 0.6));
+  const eyesF = ctx.makeEyeField([
+    { pos: [14, 36, -80], w: 22, iris: 'ring_pink', line: 'pink' }, { pos: [-30, 44, -90], w: 26, iris: 'blue', line: 'cyan' }, { pos: [36, 50, -100], w: 24, iris: 'orange', line: 'pink' }, { pos: [-2, 62, -120], w: 34, iris: 'ring_cyan', line: 'cyan' }
+  ]); scene.add(eyesF.group);
+
+  // 老式系统窗口
+  const defs = [
+    { title: 'タマシイ.exe', lines: ['鎖を読み込み中…', 'ゴーストを同期しています'], pos: [9, 6.2, -14], ry: -0.38, w: 8.4 },
+    { title: 'ghost.dll', lines: ['0x0000GC', '殻の中に、魂はまだある。'], pos: [-17, 14, -38], ry: 0.3, w: 8 },
+    { title: 'chain.sys', lines: ['リンク 46 / 46', '接続は切れません'], pos: [19, 16, -50], ry: -0.22, w: 9 }
+  ];
+  const wins = defs.map((d, i) => {
+    const tx = winTexture(d.title, d.lines, 0.4); const m = new THREE.Mesh(new THREE.PlaneGeometry(d.w, d.w * 360 / 640), new THREE.MeshBasicMaterial({ map: tx.tex, transparent: true, toneMapped: false }));
+    m.position.set(...d.pos); m.rotation.y = d.ry; scene.add(m); return { m, d, tx, base: new THREE.Vector3(...d.pos) };
+  });
+
+  // 假名花瓣
+  const R = rng(17), petals = [];
+  for (let i = 0; i < 70; i++) {
+    const m = glyphMesh(ctx.atlasO, KANA[Math.floor(R() * KANA.length)], i % 3 ? 0xffd2e8 : 0xffffff, 0.9 + R() * 1.4, 0.55); m.userData = { x: (R() - 0.5) * 60, y0: R() * 30, z: -6 - R() * 60, s: 0.5 + R() * 1.2, ph: R() * 6 }; scene.add(m); petals.push(m);
+  }
+
+  function update({ t, f, S, k, post }) {
+    water.material.uniforms.uTime.value = t; water.material.uniforms.uCam.value.copy(camera.position);
+    sun.material.uniforms.uTime.value = t * 0.5; sun.material.uniforms.uPulse.value = f.kick * 0.5; sunGlow.material.opacity = 0.32 + f.kick * 0.08;
+    const fl = Math.sin(t * 0.7) * 0.4;
+    ghost.position.y = 13.2 + fl; mirror.position.y = -(13.2 + fl);
+    ghost.material.uniforms.uTime.value = t; ghost.material.uniforms.uGlitch.value = f.hit * 0.25 + 0.04; ghost.material.uniforms.uA.value.set(0xff7ab8); ghost.material.uniforms.uB.value.set(0xfff0a8);
+    mirror.material.uniforms.uTime.value = t; mirror.material.uniforms.uGlitch.value = 0.12 + f.hit * 0.3; mirror.material.uniforms.uA.value.set(0xff7ab8); mirror.material.uniforms.uB.value.set(0xfff0a8);
+    // 幽灵头顶的锁链光环
+    halo.layout((u) => { const a = u * Math.PI * 2; return new THREE.Vector3(Math.cos(a) * 13, Math.sin(a) * 13, 0); }, { frac: 1, scale: 0.9, twist: t * 0.3 });
+    halo.mesh.position.set(-10, ghost.position.y, -24.5); halo.mesh.rotation.set(Math.sin(t * 0.2) * 0.25, t * 0.25, 0.2);
+    // 从天上垂下来的锁链
+    hang.layout((u) => new THREE.Vector3(20 + Math.sin(u * 5 + t * 0.7) * 0.8, 70 - u * 68, -34 + Math.cos(u * 4 + t * 0.5) * 0.8), { frac: 1, scale: 1.1, twist: t * 0.2 });
+    wins.forEach((w, i) => { w.m.position.y = w.base.y + Math.sin(t * 0.5 + i * 2) * 0.35; w.m.rotation.y = w.d.ry + Math.sin(t * 0.3 + i) * 0.05; });
+    if (Math.floor(t * 3) !== (update.lastP ?? -1)) {      // 进度条每 1/3 秒重绘（只重绘第一块窗口）
+      update.lastP = Math.floor(t * 3); const w0 = wins[0]; const p = (t * 0.07) % 1; const nt = winTexture(w0.d.title, w0.d.lines, p); w0.m.material.map.dispose(); w0.m.material.map = nt.tex; w0.m.material.needsUpdate = true;
+    }
+    petals.forEach((m, i) => { const u = m.userData; m.position.set(u.x + Math.sin(t * 0.4 * u.s + u.ph) * 3, ((u.y0 - t * 0.9 * u.s) % 30 + 30) % 30 + 0.5, u.z); m.rotation.z = Math.sin(t * u.s + u.ph) * 0.8; });
+    cf.update(t, f);
+    eyesF.update(t, camera, { opacity: 0.8, appear: smooth(1.5, 9, S.lt), kick: f.kick * 0.5 });
+    camera.position.set(Math.sin(t * 0.17) * 2.5, 3.4 + Math.sin(t * 0.3) * 0.3, 16 - S.p * 3);
+    camera.lookAt(-2, 8, -40);
+    const s = post.s; s.bloom = 0.38 + f.kick * 0.1; s.bloomT = 0.7; s.bloomR = 0.5; s.ab = 0.0028 + f.hit * 0.0012; s.grain = 0.07; s.scan = 0.06; s.warp = 0.04; s.vig = 0.5; s.glitch = Math.max(s.glitch, f.hit * 0.1); s.track = 0.3;
+  }
+  return { scene, camera, update };
+}

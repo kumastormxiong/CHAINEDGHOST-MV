@@ -1,0 +1,24 @@
+# 不上传：音乐文件、渲染测试图片、视频输出
+web/audio/
+render/
+output/
+storyboard/
+*.wav
+*.mp3
+*.flac
+*.ogg
+*.m4a
+*.mp4
+*.webm
+*.mov
+
+# 不上传：第三方大文件与依赖、备份与缓存
+_bin/
+_skill/
+web/node_modules/
+tools/__pycache__/
+tools/_backup_pre_chainedghost_src/
+__pycache__/
+*.pyc
+*.log
+*.err
