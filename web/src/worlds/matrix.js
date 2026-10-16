@@ -73,7 +73,7 @@ export function create(ctx) {
     } else chain.mesh.count = 0;
     // 相机：沿弧线缓慢环绕，鼓点推一下
     const ang = Math.sin(t * 0.16) * 0.42;
-    camera.position.set(Math.sin(ang) * 15.5, 4.2 + Math.sin(t * 0.27) * 0.5, 17 + Math.cos(ang) * 4.2 - f.kick * 0.5 - S.p * 3.0);
+    camera.position.set(Math.sin(ang) * 15.5, 4.2 + Math.sin(t * 0.27) * 0.5, 23 + Math.cos(ang) * 4.2 - f.kick * 0.5 - S.p * 3.0);
     camera.lookAt(Math.sin(ang) * -2, 3.4, -2);
     grid.material.uniforms.uTime.value = t; grid.material.uniforms.uCam.value.copy(camera.position); grid.material.uniforms.uPulse.value = f.kick * 0.5;
     beam.position.x = ((t * 6) % 80) - 40; beam.rotation.z = 0.06;

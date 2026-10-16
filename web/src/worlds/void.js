@@ -16,9 +16,17 @@ export function create(ctx) {
 
   const ghost = makeGhost(ctx.ghostTex, 9); ghost.position.set(0, 4.9, 0); scene.add(ghost);
 
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(6.6, 0.025, 8, 160), new THREE.MeshBasicMaterial({ color: PAL.magenta, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, toneMapped: false }));
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(6.6, 0.085, 12, 200), new THREE.MeshBasicMaterial({ color: PAL.magenta, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, toneMapped: false }));
   ring.position.set(0, 5.0, -2.5); scene.add(ring);
   const ring2 = ring.clone(); ring2.scale.setScalar(1.18); ring2.material = ring.material.clone(); ring2.material.color.set(PAL.cyan); ring2.material.opacity = 0.45; scene.add(ring2);
+  // 光圈拖影：几层渐淡的副本，旋转比本体滞后
+  const trails = [];
+  [[ring, PAL.magenta, 1], [ring2, PAL.cyan, -1]].forEach(([src, c, dir]) => {
+    for (let i = 1; i <= 4; i++) {
+      const m = new THREE.Mesh(src.geometry, new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.22 / i, blending: THREE.AdditiveBlending, toneMapped: false, depthWrite: false }));
+      scene.add(m); trails.push({ m, src, i, dir });
+    }
+  });
 
   const chain = makeChain(260, ctx.env); scene.add(chain.mesh);
   const key = new THREE.DirectionalLight(0xff7ac8, 1.2); key.position.set(-6, 8, 8); scene.add(key);
@@ -50,6 +58,10 @@ export function create(ctx) {
     u.uFade.value = smooth(0.4, 3.0, lt); ghost.position.y = 4.9 + Math.sin(t * 0.8) * 0.18;
     ring.rotation.z = t * 0.12; ring.rotation.x = Math.sin(t * 0.3) * 0.25; ring2.rotation.z = -t * 0.08; ring2.rotation.y = t * 0.2;
     ring.scale.setScalar(1 + f.kick * 0.05);
+    trails.forEach(({ m, src, i, dir }) => {
+      m.position.copy(src.position); m.scale.setScalar(src.scale.x * (1 - i * 0.012));
+      m.rotation.set(src.rotation.x - i * 0.05 * dir, src.rotation.y - i * 0.06 * (dir < 0 ? 1 : 0), src.rotation.z - i * 0.09 * dir);
+    });
     // 锁链螺旋：随时间长出来
     const grow = smooth(1.5, 12, lt);
     chain.layout((x) => { const a = x * Math.PI * 2 * 3.2 + t * 0.55, r = 3.9 + 0.5 * Math.sin(x * 7 + t * 0.9) + f.kick * 0.15; return new THREE.Vector3(Math.cos(a) * r, 0.0 + x * 11.0, Math.sin(a) * r * 0.75 - 0.5); }, { frac: 0.12 + 0.88 * grow, scale: 0.62 });
@@ -59,7 +71,7 @@ export function create(ctx) {
     nameT.material.opacity = smooth(5.5, 8.5, lt) * (1 - smooth(14.5, 17.5, lt)); nameT.visible = nameT.material.opacity > 0.01;
     title.material.opacity = ta * fl; titleG.material.opacity = ta * 0.28; title.position.x += (lt < 5.2 ? (Math.sin(t * 90) * 0.12 * (1 - smooth(3.5, 5.2, lt))) : 0); titleG.position.x += 0.04;
     const dpos = dust.geometry.attributes.position; for (let i = 0; i < dn; i++) { dpos.array[i * 3 + 1] = (dp[i * 3 + 1] + t * dsp[i] * 0.6) % 16; } dpos.needsUpdate = true;
-    const s = post.s; s.bloom = 0.6 + f.kick * 0.25; s.glitch = Math.max(s.glitch, f.hit * 0.15); s.track = 0.6; s.scan = 0.13; s.ab = 0.0022 + f.hit * 0.002;
+    const s = post.s; s.bloom = 0.95 + f.kick * 0.3; s.bloomR = 0.7; s.glitch = Math.max(s.glitch, f.hit * 0.15); s.track = 0.6; s.scan = 0.13; s.ab = 0.0022 + f.hit * 0.002;
   }
   return { scene, camera, update };
 }

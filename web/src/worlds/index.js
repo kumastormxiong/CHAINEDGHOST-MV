@@ -10,11 +10,12 @@ import * as outro from './outro.js';
 import * as wasteland from './wasteland.js';
 import * as soul from './soul.js';
 import * as flash from './flash.js';
-import * as soulvoid from './soulvoid.js';
+import * as neural from './neural.js';
+import * as dna from './dna.js';
 import * as endcard from './endcard.js';
 import * as cpu from './cpu.js';
 
-const mods = { void: void_, matrix, highway, city, tunnel, hit, dream, outro, wasteland, soul, flash, soulvoid, endcard, cpu };
+const mods = { void: void_, matrix, highway, city, tunnel, hit, dream, outro, wasteland, soul, flash, neural, endcard, cpu, dna };
 
 export function createWorlds(ctx) {
   const out = {};

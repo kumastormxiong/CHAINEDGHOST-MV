@@ -27,7 +27,7 @@ export class Timeline {
     const blk = this.blocks[sec.lyric];
     if (!blk) return [];
     let rows = blk.rows.filter((r) => r.length >= 3 && r.every((x) => x.length === 1));
-    if (sec.lines) rows = rows.slice(0, sec.lines.length);
+    if (sec.lines) { const o = sec.rowOffset || 0; rows = rows.slice(o, o + sec.lines.length); }
     return rows;
   }
   // 当前段落正在唱第几个假名：返回 {i（0 起，-1 表示尚未开始）, rows, flat, n, times（每个假名的起唱时间）, age（距当前假名起唱的秒数）}

@@ -1,6 +1,6 @@
 // 场景 flash（Outro B，210–218 秒）：闪回蒙太奇。记忆碎片一闪而过（闪回卡片），代码雨，碎裂的"魂"字，终端开机。
 import * as THREE from 'three';
-import { PAL, col, KANA, JP_FONT, makeStars, textMesh, smooth, clamp, hash, rng } from '../lib.js';
+import { PAL, col, KANA, JP_FONT, KANJI_FONT, makeStars, textMesh, smooth, clamp, hash, rng } from '../lib.js';
 import { makeCyberField, makeFlashCards } from '../cyber.js';
 
 const RW = 1280, RH = 720, CW = 18, CH = 20, NC = Math.floor(RW / CW), TAIL = 16;
@@ -36,13 +36,18 @@ export function create(ctx) {
   // 碎裂的魂字（几块错位叠放）
   const R = rng(88), shards = [];
   for (let i = 0; i < 5; i++) {
-    const m = textMesh('魂', 4, { size: 220, weight: '900', font: JP_FONT, fill: i % 2 ? '#ff2f8f' : '#3ff6ff' }, true);
+    const m = textMesh('魂', 4, { size: 220, weight: '900', font: KANJI_FONT, fill: i % 2 ? '#ff2f8f' : '#3ff6ff' }, true);
     m.position.set((R() - 0.5) * 30, (R() - 0.5) * 16, -10 - R() * 14);
     m.userData = { base: m.position.clone(), ph: R() * 6 };
     scene.add(m); shards.push(m);
   }
 
   const cf = makeCyberField({ n: 22, codes: 8, box: [40, 26, 120], seed: 77 }); scene.add(cf.group);
+  const gits = textMesh('GHOST IN THE SHELL', 3.3, { font: '"Michroma", sans-serif', weight: '400', size: 150, fill: '#ffffff', glow: '#ff2f8f', spacing: 26 }, true);
+  gits.position.set(0, 0.2, -6); scene.add(gits);
+  // 文字底板：压暗背后的代码雨，让 GHOST IN THE SHELL 清晰可读
+  const gitsBack = new THREE.Mesh(new THREE.PlaneGeometry(44, 9), new THREE.MeshBasicMaterial({ color: 0x05000c, transparent: true, opacity: 0, depthWrite: false, toneMapped: false }));
+  gitsBack.position.set(0, 0.2, -6.5); scene.add(gitsBack);
   const fc = makeFlashCards(camera, scene, { dist: 4.2, seed: 9 });
 
   // 终端
@@ -70,12 +75,14 @@ export function create(ctx) {
       m.rotation.z = Math.sin(t * 0.5 + u.ph) * 0.15;
     });
     cf.update(t, f);
+    const gA = smooth(1.2, 2.0, lt) * (1 - smooth(6.8, 7.6, lt)); const flick = 0.55 + 0.45 * Math.sin(t * 23.0 + Math.sin(t * 3.1) * 2.0);
+    gits.material.opacity = gA * flick * (0.85 + f.kick * 0.2); gitsBack.material.opacity = gA * 0.72; gits.position.x = (hash(Math.floor(t * 14)) - 0.5) * 0.25 * f.hit;
     term.visible = lt > T0 - 0.3;
     if (term.visible) drawTerm(lt, t, T0);
     camera.position.set(Math.sin(t * 13.1) * 0.1 * (0.3 + f.hit), Math.sin(t * 9.7) * 0.08, 14);
     camera.lookAt(0, 0, 0);
     camera.fov = 60 + f.kick * 4; camera.updateProjectionMatrix();
-    const s = post.s; s.bloom = 0.55 + f.kick * 0.2; s.glitch = Math.max(s.glitch, 0.25 + f.hit * 0.5); s.ab = 0.006 + f.hit * 0.01; s.scan = 0.2; s.track = 0.5;
+    const s = post.s; s.bloom = 0.55 + f.kick * 0.2; s.glitch = Math.max(s.glitch, 0.12 + f.hit * 0.35); s.ab = 0.006 + f.hit * 0.01; s.scan = 0.2; s.track = 0.5;
     s.flash = [amt * 0.02, 0, amt * 0.02];
   }
   return { scene, camera, update };

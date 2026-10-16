@@ -6,6 +6,7 @@ export const col = (h) => new THREE.Color(h);
 export const KANA = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン'.split('');
 export const JP_FONT = '"NotoSC9", "Yu Gothic", "Meiryo", "MS Gothic", sans-serif';
 
+export const KANJI_FONT = '"DelaGothic", "NotoSC9", sans-serif';
 export const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
 export const lerp = (a, b, t) => a + (b - a) * t;
 export const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t); };
@@ -13,7 +14,7 @@ export function rng(seed) { let s = seed >>> 0; return () => ((s = (s * 1664525 
 export const hash = (n) => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
 
 export async function loadFonts() {
-  const defs = [['NotoSC9', 'assets/fonts/NotoSansSC-900.woff'], ['Exo2', 'assets/fonts/Exo2-800i.woff'], ['PS2P', 'assets/fonts/PressStart2P-400.woff']];
+  const defs = [['NotoSC9', 'assets/fonts/NotoSansSC-900.woff'], ['Exo2', 'assets/fonts/Exo2-800i.woff'], ['PS2P', 'assets/fonts/PressStart2P-400.woff'], ['DelaGothic', 'assets/fonts/DelaGothicOne-Regular.ttf'], ['Michroma', 'assets/fonts/Michroma-Regular.ttf'], ['SciKanji', 'assets/fonts/SciKanji-HYZhongHei.ttf']];
   for (const [name, url] of defs) {
     try { const f = new FontFace(name, `url(${url})`); await f.load(); document.fonts.add(f); } catch (e) { console.warn('font fail', name, e); }
   }
@@ -161,8 +162,8 @@ export function makeSun(r = 20, gain = 0.95) {
 }
 
 // ---- 铬金属锁链（InstancedMesh）
-export function makeChain(maxN, env, { link = 1, color = 0xe8ecff, rough = 0.16, emissive = 0x1a0310 } = {}) {
-  const geo = new THREE.TorusGeometry(0.5, 0.125, 12, 28); geo.scale(0.78, 1.5, 0.78);
+export function makeChain(maxN, env, { link = 1, color = 0xe8ecff, rough = 0.16, emissive = 0x1a0310, tube = 1 } = {}) {
+  const geo = new THREE.TorusGeometry(0.5, 0.125 * tube, 12, 28); geo.scale(0.78, 1.5, 0.78);
   const mat = new THREE.MeshStandardMaterial({ color, metalness: 1, roughness: rough, envMap: env, envMapIntensity: 1.0, emissive, emissiveIntensity: 1 });
   const mesh = new THREE.InstancedMesh(geo, mat, maxN); mesh.frustumCulled = false; mesh.count = 0;
   const pitch = 0.98 * link;

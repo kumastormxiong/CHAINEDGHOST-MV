@@ -2,7 +2,7 @@
 // 死掉的落日，数据线像蛇一样穿过废墟，画面不时撕裂、闪回。取代了原来与 break 1 重复的梦核场景。
 import * as THREE from 'three';
 import { PAL, col, makeSky, makeSun, makeStars, glowSprite, rng } from '../lib.js';
-import { makeCableSet, makeCyberField, makeLyricLayer, makeFlashCards, makeBlockField } from '../cyber.js';
+import { makeCableSet, makeCyberField, makeLyricLayer, makeFlashCards, makeBlockField, makeDataStream } from '../cyber.js';
 
 export function create(ctx) {
   const scene = new THREE.Scene(); scene.background = col(0x080208);
@@ -61,7 +61,7 @@ export function create(ctx) {
   scene.add(solid, wire);
 
   // 数据线：一根蛇形的数据包串，穿过整个废墟
-  const cab = makeCableSet(640, ctx.env, { colors: [PAL.pink, PAL.cyan] }); scene.add(cab.mesh);
+  const stream = makeDataStream((u) => new THREE.Vector3(Math.sin(u * 34) * 26, 4 + Math.sin(u * 11) * 5, -u * 420 + 10), { segs: 700, radius: 0.16 }); scene.add(stream.mesh);
   const cf = makeCyberField({ n: 24, codes: 8, box: [60, 32, 220], seed: 51 }); scene.add(cf.group);
   const bf = makeBlockField({ n: 110, box: [60, 30, 300], seed: 71 }); scene.add(bf.mesh);
   const lyr = makeLyricLayer(ctx, camera, scene, { heroColor: 0xffc2e6, outline: PAL.cyan });
@@ -74,7 +74,7 @@ export function create(ctx) {
     terrain.material.uniforms.uTime.value = t; terrain.material.uniforms.uPulse.value = f.kick * 0.6 + f.hit * 0.3;
     sun.material.uniforms.uTime.value = t; sun.material.uniforms.uPulse.value = f.kick * 0.4;
     sunGlow.material.opacity = 0.3 + f.kick * 0.1;
-    cab.layout((u) => new THREE.Vector3(Math.sin(u * 34 + t * 0.3) * 26, 4 + Math.sin(u * 11 + t) * 5, -u * 420 + 10), { frac: 1, scale: 1, twist: t * 0.5, samples: 600 });
+    stream.update(t, 1 + f.kick * 0.6 + f.hit * 0.4);
     cf.update(t, f); bf.update(t, f);
     lyr.update(k, t, f);
     fc.update(t, 0.12 + f.hit * 0.5);

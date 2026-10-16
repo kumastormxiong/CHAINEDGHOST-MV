@@ -1,7 +1,7 @@
 // 场景 soul（Outro A，200–210 秒）：黑色虚空里，"魂"字随鼓点剧烈震动、红蓝错位；
 // 一根锁链从一条开始，慢慢绕着它缠成好几层。这是唯一保留真锁链的地方。
 import * as THREE from 'three';
-import { PAL, col, JP_FONT, makeChain, makeGrid, makeStars, textMesh, smooth, lerp } from '../lib.js';
+import { PAL, col, JP_FONT, KANJI_FONT, makeChain, makeGrid, makeStars, textMesh, smooth, lerp } from '../lib.js';
 import { makeCyberField } from '../cyber.js';
 
 const ROUNDS = [200.826, 203.634, 206.18, 208.422];
@@ -13,7 +13,7 @@ export function create(ctx) {
   const cf = makeCyberField({ n: 16, codes: 6, box: [50, 30, 160], seed: 14 }); scene.add(cf.group);
   const grid = makeGrid({ y: -7, speed: 6, scale: 3, colA: PAL.magenta, colB: PAL.cyan }); grid.material.uniforms.uFog.value = 0.02; scene.add(grid);
 
-  const O = { size: 300, weight: '900', font: JP_FONT };
+  const O = { size: 300, weight: '700', font: '"STKaiti", "华文楷体", "KaiTi", serif' };   // 魂字：楷体毛笔感，替换原字体
   const main = textMesh('魂', 7, { ...O, chrome: true, glow: '#ff4fd8' }, false);
   const cy = textMesh('魂', 7, { ...O, fill: '#3ff6ff' }, true); cy.material.opacity = 0.35; cy.position.z = -0.1;
   const pk = textMesh('魂', 7, { ...O, fill: '#ff2f8f' }, true); pk.material.opacity = 0.35; pk.position.z = -0.2;
@@ -37,7 +37,9 @@ export function create(ctx) {
       const N = lerp(0.6, 6, prog);
       chain.layout((u) => {
         const th = u * Math.PI * 2 * N + t * 0.4;
-        return new THREE.Vector3(Math.cos(th) * 6.2, 2.6 + lerp(-4.6, 4.6, u), Math.sin(th) * 6.2);
+        const Rr = 6.2 + 0.9 * Math.sin(u * 13 + t * 0.6) + 0.35 * Math.sin(u * 37 - t * 1.1);
+        const yy = 2.6 + lerp(-4.6, 4.6, u) + 0.45 * Math.sin(u * 23 + t * 0.8);
+        return new THREE.Vector3(Math.cos(th) * Rr, yy, Math.sin(th) * Rr);
       }, { frac: lerp(0.02, 1, prog), scale: 1.0, twist: t * 0.3, samples: 600 });
     } else chain.mesh.count = 0;
 

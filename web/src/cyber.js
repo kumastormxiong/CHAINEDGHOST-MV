@@ -5,7 +5,7 @@
 //  makeFlashCards 闪回卡片：记忆碎片一闪而过
 //  makeBlockField 抽象数据方块场：无文字的立方体阵列
 import * as THREE from 'three';
-import { PAL, KANA, JP_FONT, glyphGeo, makeGlyphBank, glyphMesh, rng, hash, clamp } from './lib.js';
+import { PAL, KANA, JP_FONT, KANJI_FONT, glyphGeo, makeGlyphBank, glyphMesh, rng, hash, clamp } from './lib.js';
 
 const CODE = ['if (ghost.alive) {', '  sync(chain, 0x7F3A);', '  escape(memory);', '}', 'while (!signal) {', '  reboot(0);', 'ERR: NULL_SOUL', 'hash = 0x9C2F ^ tick;', 'for (i in 0..46) {', '  link(i, i + 1);', '}', 'buf[ptr++] = 0xFF;', 'return NULL;', 'helix.encode(soul, key);', 'dna[i] ^= chain[i];'];
 
@@ -126,8 +126,24 @@ export function makeBlockField({ n = 200, box = [60, 30, 200], colors = [PAL.cya
   return { mesh, update };
 }
 
+// ---------- 数据流：沿一条路径的发光管道，表面是流动的亮带（无珠子、无红蓝光斑）----------
+export function makeDataStream(fn, { segs = 600, radius = 0.12, colors = [0xfff3c4, 0xffd27a] } = {}) {
+  const pts = []; for (let i = 0; i < 160; i++) pts.push(fn(i / 159));
+  const curve = new THREE.CatmullRomCurve3(pts);
+  const geo = new THREE.TubeGeometry(curve, segs, radius, 8, false);
+  const mat = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    uniforms: { uT: { value: 0 }, uGain: { value: 1 }, uA: { value: new THREE.Color(colors[0]) }, uB: { value: new THREE.Color(colors[1]) } },
+    vertexShader: 'varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
+    fragmentShader: 'uniform float uT,uGain;uniform vec3 uA,uB;varying vec2 vUv;void main(){float b=fract(vUv.x*70.0-uT*5.0);float pulse=smoothstep(0.0,0.15,b)*(1.0-smoothstep(0.15,0.55,b));float rim=1.0-abs(vUv.y-0.5)*2.0;vec3 c=mix(uA,uB,pulse)*(0.25+pulse*1.8)*(0.35+0.65*rim);gl_FragColor=vec4(c*uGain,1.0);}'
+  });
+  const mesh = new THREE.Mesh(geo, mat); mesh.frustumCulled = false;
+  function update(t, gain = 1) { mat.uniforms.uT.value = t; mat.uniforms.uGain.value = gain; }
+  return { mesh, update };
+}
+
 // ---------- 歌词层：挂在镜头上，任何场景都可以用 ----------
-export function makeLyricLayer(ctx, camera, scene, { heroColor = 0xffd6ef, outline = PAL.cyan, dist = 6, heroY = -0.34, heroH = 0.66, stripY = -0.78, stripN = 14 } = {}) {
+export function makeLyricLayer(ctx, camera, scene, { heroColor = 0xffd6ef, outline = PAL.cyan, dist = 6, heroY = -0.34, heroH = 0.66, stripY = -0.78, stripN = 14, hold = false } = {}) {
   if (camera.parent !== scene) scene.add(camera);
   const root = new THREE.Group(); camera.add(root);
   const hero = makeGlyphBank(ctx.atlasF, heroColor, 1, 0.8);
@@ -137,18 +153,25 @@ export function makeLyricLayer(ctx, camera, scene, { heroColor = 0xffd6ef, outli
   for (let i = 0; i < stripN; i++) { const m = glyphMesh(ctx.atlasF, KANA[0], 0xffffff, 1, 0); m.visible = false; root.add(m); strip.push(m); }
   const gF = {};
   const geoF = (ch) => gF[ch] || (gF[ch] = glyphGeo(ctx.atlasF, ch, 1, 1));
+  let lastCh = null;   // hold 模式：记住最后一个假名，直到下一个假名出现前一直保留
   function update(k, t, f) {
     const halfH = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * dist;
     root.position.set(0, 0, -dist);
     const has = !!k && k.i >= 0;
-    const ch = has ? k.flat[k.i] : null;
+    let ch = has ? k.flat[k.i] : null;
+    if (hold) { if (ch && ch in hero.map) lastCh = ch; else if (lastCh) ch = lastCh; }
     const show = !!ch && ch in hero.map;
+    const held = hold && !(has && k.flat[k.i] === ch);   // 当前显示的是保持下来的旧假名
     hero.group.visible = heroO.group.visible = show;
     if (show) {
-      const pp = Math.exp(-(k.age ?? 0) * 7);
-      const sc = halfH * heroH * (1 + pp * 0.22 + f.kick * 0.05);
-      const a = hero.show(ch, 0.55); a.position.set(0, halfH * heroY, 0); a.scale.setScalar(sc);
-      const b = heroO.show(ch, 0.45); b.position.set(halfH * 0.01, halfH * heroY - halfH * 0.01, -0.02); b.scale.setScalar(sc * 1.04);
+      const pp = held ? 0 : Math.exp(-(k.age ?? 0) * 7);
+      const beat = f.kick * 0.6 + f.hit * 0.4;
+      const jx = hold ? Math.sin(t * 53.0) * halfH * 0.012 * (0.4 + beat * 3) : 0;
+      const jy = hold ? Math.cos(t * 47.0) * halfH * 0.008 * (0.4 + beat * 3) : 0;
+      const sc = halfH * heroH * (1 + pp * 0.22 + f.kick * 0.05 + (hold ? beat * 0.06 : 0));
+      const a = hero.show(ch, 0.55); a.position.set(jx, halfH * heroY + jy, 0); a.scale.setScalar(sc);
+      const b = heroO.show(ch, 0.45); b.position.set(halfH * 0.01 + jx, halfH * heroY - halfH * 0.01 + jy, -0.02); b.scale.setScalar(sc * 1.04);
+      if (hold && Math.sin(t * 41.0) > 0.9 - beat * 0.5) hero.group.visible = heroO.group.visible = false;   // 随节拍闪烁
     }
     let acc = 0, row = null, within = -1;
     if (has && k.rows) for (const r of k.rows) { if (k.i < acc + r.length) { row = r; within = k.i - acc; break; } acc += r.length; }
@@ -177,8 +200,11 @@ function drawCard(i) {
     g.fillStyle = '#fff'; g.beginPath(); g.arc(W / 2, H / 2, 26, 0, Math.PI * 2); g.fill();
   } else if (i === 1) {                // 电路网格
     g.strokeStyle = '#3ff6ff'; g.lineWidth = 3;
-    for (let x = 0; x < W; x += 32) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.stroke(); }
-    for (let y = 0; y < H; y += 32) { g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); }
+    for (let k = 0; k < 28; k++) {       // 电路走线：直角折线 + 焊盘
+      let x = r() * W, y = r() * H; g.beginPath(); g.moveTo(x, y);
+      for (let s = 0; s < 5; s++) { if (s % 2) x += (r() - 0.5) * 320; else y += (r() - 0.5) * 220; g.lineTo(x, y); }
+      g.stroke(); g.fillStyle = '#ffd84a'; g.beginPath(); g.arc(x, y, 9, 0, Math.PI * 2); g.fill();
+    }
     g.strokeStyle = '#ff2f8f'; g.lineWidth = 8; g.strokeRect(W * 0.3, H * 0.25, W * 0.4, H * 0.5);
   } else if (i === 2) {                // 代码块
     g.font = '40px Consolas, "Courier New", monospace'; g.fillStyle = '#7ff9ff';
@@ -190,12 +216,22 @@ function drawCard(i) {
     for (let k = 0; k < 260; k++) { g.fillStyle = r() < 0.5 ? '#ff2f8f' : '#3ff6ff'; g.globalAlpha = 0.25 + r() * 0.6; g.fillRect(r() * W, r() * H, 20 + r() * 400, 2 + r() * 12); }
     g.globalAlpha = 1;
   } else if (i === 5) {                // 故障的大字
-    g.font = `900 420px ${JP_FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.font = `900 420px ${KANJI_FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
     g.fillStyle = '#ff2f8f'; g.fillText('魂', W / 2 - 14, H / 2 + 10);
     g.fillStyle = '#3ff6ff'; g.fillText('魂', W / 2 + 16, H / 2 - 6);
   } else if (i === 6) {                // 终端
     g.font = '44px Consolas, "Courier New", monospace'; g.fillStyle = '#7ff9ff';
     ['> SIGNAL LOST', '> RETRY 0x00', '> MEMORY  ........ OK', '> PATCH   ........ ??', '> _'].forEach((s, k) => g.fillText(s, 100, 160 + k * 60));
+  } else if (i === 7) {                // DNA 双螺旋（闪回）
+    const pt = (u, ph) => [W / 2 + Math.cos(u * Math.PI * 8 + ph) * (150 + 60 * Math.sin(u * 7)), 30 + u * (H - 60)];
+    g.lineWidth = 7;
+    [['#ff2f8f', 0], ['#3ff6ff', Math.PI]].forEach(([c, ph]) => {
+      g.strokeStyle = c; g.shadowColor = c; g.shadowBlur = 18; g.beginPath();
+      for (let k = 0; k <= 400; k++) { const [x, y] = pt(k / 400, ph); if (k) g.lineTo(x, y); else g.moveTo(x, y); }
+      g.stroke();
+    });
+    g.shadowBlur = 0; g.strokeStyle = 'rgba(255,255,255,0.55)'; g.lineWidth = 3;
+    for (let k = 0; k < 26; k++) { const u = (k + 0.5) / 26, [x1, y1] = pt(u, 0), [x2, y2] = pt(u, Math.PI); g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke(); }
   } else {                             // 同心环 + 扫描线
     g.strokeStyle = '#ffd84a'; g.lineWidth = 4;
     for (let k = 1; k <= 8; k++) { g.beginPath(); g.arc(W / 2, H / 2, k * 40, 0, Math.PI * 2); g.stroke(); }

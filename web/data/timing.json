@@ -249,7 +249,7 @@
    "name": "Chorus 3",
    "start": 147.75,
    "end": 157.5,
-   "world": "highway",
+   "world": "tunnel",
    "mode": "apex",
    "lyric": "chorus3",
    "lines": [
@@ -275,7 +275,7 @@
    "id": "outro",
    "name": "Outro",
    "start": 157.5,
-   "end": 200.0,
+   "end": 170.0,
    "world": "outro",
    "lyric": "outro",
    "lines": [
@@ -290,12 +290,31 @@
     [
      166.883,
      171.283
-    ],
+    ]
+   ]
+  },
+  {
+   "id": "dna",
+   "name": "DNA",
+   "start": 170.0,
+   "end": 185.0,
+   "world": "dna",
+   "lyric": "outro",
+   "lines": [
     [
      174.837,
      179.237
     ]
-   ]
+   ],
+   "rowOffset": 3
+  },
+  {
+   "id": "cpu2",
+   "name": "CPU 2",
+   "start": 185.0,
+   "end": 200.0,
+   "world": "cpu",
+   "mode": "alt"
   },
   {
    "id": "soul",
@@ -323,7 +342,7 @@
    "name": "魂 C",
    "start": 218.0,
    "end": 226.0,
-   "world": "soulvoid"
+   "world": "neural"
   },
   {
    "id": "endcard",

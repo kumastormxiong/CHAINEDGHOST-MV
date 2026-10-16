@@ -26,8 +26,8 @@ export function create(ctx) {
   const sky = makeSky(SKY.top, SKY.mid, SKY.hor, { midAt: SKY.midAt, power: SKY.pw }); scene.add(sky);
   scene.add(makeStars(500, 380, 1.3, 61));
 
-  const sun = makeSun(30, 0.8); sun.position.set(0, 20, -170); scene.add(sun);
-  const sunGlow = glowSprite('255,190,150', 380, 0.8); sunGlow.position.set(0, 20, -172); scene.add(sunGlow);
+  const sun = makeSun(30, 0.8); sun.scale.setScalar(2.2); sun.position.set(0, 40, -170); scene.add(sun);
+  const sunGlow = glowSprite('255,190,150', 380, 0.8); sunGlow.scale.setScalar(2.2); sunGlow.position.set(0, 40, -172); scene.add(sunGlow);
 
   const water = new THREE.Mesh(new THREE.PlaneGeometry(1400, 1400), new THREE.ShaderMaterial({
     uniforms: { uTime: { value: 0 }, uCam: { value: new THREE.Vector3() }, uTop: { value: col(SKY.top) }, uMid: { value: col(SKY.mid) }, uHor: { value: col(SKY.hor) } },
@@ -55,18 +55,23 @@ export function create(ctx) {
   const cf = makeCyberField({ n: 30, codes: 6, box: [50, 30, 160], seed: 31 }); scene.add(cf.group);
   scene.add(new THREE.AmbientLight(0xffddee, 0.6));
   const eyesF = ctx.makeEyeField([
-    { pos: [14, 36, -80], w: 22, iris: 'ring_pink', line: 'pink' }, { pos: [-30, 44, -90], w: 26, iris: 'blue', line: 'cyan' }, { pos: [36, 50, -100], w: 24, iris: 'orange', line: 'pink' }, { pos: [-2, 62, -120], w: 34, iris: 'ring_cyan', line: 'cyan' }
+    { pos: [-58, 14, -70], w: 14, iris: 'ring_pink', line: 'pink' }, { pos: [-50, 40, -76], w: 12, iris: 'blue', line: 'cyan' }, { pos: [56, 36, -70], w: 14, iris: 'orange', line: 'pink' }, { pos: [62, 8, -80], w: 16, iris: 'ring_cyan', line: 'cyan' }
   ]); scene.add(eyesF.group);
 
   // 老式系统窗口
   const defs = [
-    { title: 'タマシイ.exe', lines: ['鎖を読み込み中…', 'ゴーストを同期しています'], pos: [9, 6.2, -14], ry: -0.38, w: 8.4 },
-    { title: 'ghost.dll', lines: ['0x0000GC', '殻の中に、魂はまだある。'], pos: [-17, 14, -38], ry: 0.3, w: 8 },
-    { title: 'chain.sys', lines: ['リンク 46 / 46', '接続は切れません'], pos: [19, 16, -50], ry: -0.22, w: 9 }
+    { title: 'タマシイ.exe', lines: ['鎖を読み込み中…', 'ゴーストを同期しています'], pos: [9, 6.2, -14], ry: -0.38, w: 8.4, t0: 0.2 },
+    { title: 'ghost.dll', lines: ['0x0000GC', '殻の中に、魂はまだある。'], pos: [-17, 14, -38], ry: 0.3, w: 8, t0: 1.3 },
+    { title: 'chain.sys', lines: ['リンク 46 / 46', '接続は切れません'], pos: [19, 16, -50], ry: -0.22, w: 9, t0: 2.4 },
+    { title: 'SYSTEM', lines: ['メモリ 0x7FC2 OK', 'ネットワーク接続中'], pos: [-6, 2.5, -20], ry: 0.12, w: 6.4, t0: 3.5 },
+    { title: 'ghost_backup', lines: ['バックアップ 73%', '殻を保存しています'], pos: [-24, 4.5, -18], ry: 0.45, w: 7, t0: 4.6 },
+    { title: 'ERROR', lines: ['0x4F3A  予期しない例外', '再試行しますか？'], pos: [14, 22, -60], ry: -0.3, w: 9.5, t0: 5.7 },
+    { title: 'NET.cfg', lines: ['接続先 : 0x00000001', '暗号化 : AES-256'], pos: [-3, 19, -44], ry: 0.08, w: 8.2, t0: 6.6 },
+    { title: 'chain.log', lines: ['リンク 生成 完了', '魂の署名を確認'], pos: [24, 6, -30], ry: -0.5, w: 7.6, t0: 7.4 }
   ];
   const wins = defs.map((d, i) => {
-    const tx = winTexture(d.title, d.lines, 0.4); const m = new THREE.Mesh(new THREE.PlaneGeometry(d.w, d.w * 360 / 640), new THREE.MeshBasicMaterial({ map: tx.tex, transparent: true, toneMapped: false }));
-    m.position.set(...d.pos); m.rotation.y = d.ry; scene.add(m); return { m, d, tx, base: new THREE.Vector3(...d.pos) };
+    const tx = winTexture(d.title, d.lines, 0.4); const m = new THREE.Mesh(new THREE.PlaneGeometry(d.w, d.w * 360 / 640), new THREE.MeshBasicMaterial({ map: tx.tex, transparent: true, toneMapped: false, opacity: 0, depthWrite: false }));
+    m.position.set(...d.pos); m.rotation.y = d.ry; m.visible = false; scene.add(m); return { m, d, tx, base: new THREE.Vector3(...d.pos) };
   });
 
   // 假名花瓣
@@ -87,7 +92,14 @@ export function create(ctx) {
     halo.mesh.position.set(-10, ghost.position.y, -24.5); halo.mesh.rotation.set(Math.sin(t * 0.2) * 0.25, t * 0.25, 0.2);
     // 从天上垂下来的锁链
     hang.layout((u) => new THREE.Vector3(20 + Math.sin(u * 5 + t * 0.7) * 0.8, 70 - u * 68, -34 + Math.cos(u * 4 + t * 0.5) * 0.8), { frac: 1, scale: 1.1, twist: t * 0.2 });
-    wins.forEach((w, i) => { w.m.position.y = w.base.y + Math.sin(t * 0.5 + i * 2) * 0.35; w.m.rotation.y = w.d.ry + Math.sin(t * 0.3 + i) * 0.05; });
+    const lt = S.lt;
+    wins.forEach((w, i) => {                                   // 窗口逐个弹出：缩放 + 淡入
+      const a = smooth(w.d.t0, w.d.t0 + 0.4, lt);
+      w.m.visible = a > 0.001; w.m.material.opacity = a;
+      w.m.scale.setScalar(3 * (0.55 + 0.45 * a + (a < 1 ? Math.sin(a * Math.PI) * 0.12 : 0)));   // 弹窗整体放大 3 倍
+      w.m.position.y = w.base.y + Math.sin(t * 0.5 + i * 2) * 0.35 + (1 - a) * 1.2;
+      w.m.rotation.y = w.d.ry + Math.sin(t * 0.3 + i) * 0.05;
+    });
     if (Math.floor(t * 3) !== (update.lastP ?? -1)) {      // 进度条每 1/3 秒重绘（只重绘第一块窗口）
       update.lastP = Math.floor(t * 3); const w0 = wins[0]; const p = (t * 0.07) % 1; const nt = winTexture(w0.d.title, w0.d.lines, p); w0.m.material.map.dispose(); w0.m.material.map = nt.tex; w0.m.material.needsUpdate = true;
     }

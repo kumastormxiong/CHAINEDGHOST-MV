@@ -17,8 +17,9 @@ export function create(ctx) {
   const sky = makeSky(0x04000d, 0x2a0838, 0xb02a70, { midAt: 0.3, power: 0.55 }); scene.add(sky);
   scene.add(makeStars(2200, 380, 1.5, 4));
 
-  const sun = makeSun(38, 0.6); sun.position.set(0, 10, -190); scene.add(sun);
-  const sunGlow = glowSprite('255,120,90', 300, 0.75); sunGlow.position.set(0, 8, -192); scene.add(sunGlow);
+  // 太阳放大约 3 倍（后退到 z=-232 以保证不超出画面），光晕同步放大
+  const sun = makeSun(38, 0.6); sun.scale.setScalar(3); sun.position.set(0, 10, -232); scene.add(sun);
+  const sunGlow = glowSprite('255,120,90', 300, 0.75); sunGlow.scale.setScalar(2.2); sunGlow.position.set(0, 8, -234); scene.add(sunGlow);
   const hz = glowSprite('255,60,140', 500, 0.55); hz.scale.set(1.2, 0.22, 1); hz.position.set(0, 4, -200); scene.add(hz);
 
   const rA = makeRidge({ z: -125, h: 24, seed: 3, color: PAL.cyan, valley: 30 }), rB = makeRidge({ z: -160, h: 36, seed: 9, color: PAL.magenta, valley: 40, width: 420 });
@@ -29,7 +30,7 @@ export function create(ctx) {
   const ARCH_N = 7, SPACING = 52, TOTAL = ARCH_N * SPACING;
   const arches = [];
   for (let i = 0; i < ARCH_N; i++) {
-    const c = makeChain(80, ctx.env); scene.add(c.mesh);
+    const c = makeChain(80, ctx.env, { tube: 1.9 }); scene.add(c.mesh);
     c.layout((u) => { const a = Math.PI * (1 - u); return new THREE.Vector3(Math.cos(a) * 13.5, 0.1 + Math.sin(a) * 11, 0); }, { frac: 1, scale: 1.25, twist: i });
     const lamp = glowSprite(i % 2 ? '63,246,255' : '255,47,143', 9, 0.8); lamp.position.set(0, 11.4, 0.2); c.mesh.add(lamp);
     arches.push(c.mesh);
@@ -55,7 +56,7 @@ export function create(ctx) {
     sky.material.uniforms.uTop.value.set(M.top); sky.material.uniforms.uMid.value.set(M.mid); sky.material.uniforms.uHor.value.set(M.hor);
     scene.fog.color.set(M.hor);
     const rise = lerp(M.rise[0], M.rise[1], S.p);
-    sun.position.y = lerp(-6, 31, rise); sunGlow.position.y = sun.position.y; sun.material.uniforms.uTime.value = t; sun.material.uniforms.uPulse.value = f.kick;
+    sun.position.y = lerp(-8, 24, rise); sunGlow.position.y = sun.position.y; sun.material.uniforms.uTime.value = t; sun.material.uniforms.uPulse.value = f.kick;
     sunGlow.material.opacity = 0.12 + rise * 0.12 + f.kick * 0.05;
     grid.material.uniforms.uTime.value = t; grid.material.uniforms.uSpeed.value = M.speed; grid.material.uniforms.uCam.value.copy(camera.position); grid.material.uniforms.uPulse.value = f.kick;
     // 拱门向镜头飞来

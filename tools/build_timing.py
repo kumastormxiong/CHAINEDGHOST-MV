@@ -50,11 +50,13 @@ S = [
     dict(id='interlude2', name='オオオ 2',      start=128.1,  end=132.5,  world='hit', lyric='interlude2', pulses=[0.1, 1.3, 2.5]),
     dict(id='break2',     name='Break 2',      start=132.5,  end=138.5,  world='city', mode='pre'),
     dict(id='bridge',     name='Bridge',       start=138.5,  end=147.75, world='wasteland', lyric='bridge', lines=L['bridge']),
-    dict(id='chorus3',    name='Chorus 3',     start=147.75, end=157.5,  world='highway', mode='apex', lyric='chorus3', lines=L['chorus3']),
-    dict(id='outro',      name='Outro',        start=157.5,  end=200.0,  world='outro', lyric='outro', lines=L['outro']),
+    dict(id='chorus3',    name='Chorus 3',     start=147.75, end=157.5,  world='tunnel', mode='apex', lyric='chorus3', lines=L['chorus3']),
+    dict(id='outro',      name='Outro',        start=157.5,  end=170.0,  world='outro', lyric='outro', lines=L['outro'][:3]),
+    dict(id='dna',        name='DNA',          start=170.0,  end=185.0,  world='dna', lyric='outro', lines=L['outro'][3:], rowOffset=3),
+    dict(id='cpu2',       name='CPU 2',        start=185.0,  end=200.0,  world='cpu', mode='alt'),
     dict(id='soul',       name='魂 A',          start=200.0,  end=210.0,  world='soul', rounds=[200.826, 203.634, 206.18, 208.422]),
     dict(id='flash',      name='魂 B',          start=210.0,  end=218.0,  world='flash', term=214.85),
-    dict(id='soulvoid',   name='魂 C',          start=218.0,  end=226.0,  world='soulvoid'),
+    dict(id='soulvoid',   name='魂 C',          start=218.0,  end=226.0,  world='neural'),
     dict(id='endcard',    name='End',          start=226.0,  end=239.72, world='endcard'),
 ]
 p = os.path.join(ROOT, 'web', 'data', 'timing.json')

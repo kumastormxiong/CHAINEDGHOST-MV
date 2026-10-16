@@ -22,3 +22,5 @@ __pycache__/
 *.pyc
 *.log
 *.err
+# 本地一次性补丁脚本
+tools/_patch_*.py

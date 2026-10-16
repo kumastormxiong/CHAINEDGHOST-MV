@@ -1,7 +1,10 @@
-// 场景 cpu（Break 1 后半段）：超级复杂的 CPU 电路板。镜头绕着板子缓慢俯冲，掠过密集走线、焊盘、过孔、
-// 芯片、引脚与电容；信号脉冲沿走线奔跑，中央处理器的引脚随鼓点闪亮。全部确定性（固定种子），录制与逐帧渲染一致。
+// 场景 cpu：超级复杂的 CPU 电路板。两种镜头：
+//  - break（71.5–79.4 秒）：镜头绕着板子俯冲旋转；
+//  - alt（185–200 秒）：镜头低空向前穿行，左右蜿蜒掠过走线与芯片。
+// 信号脉冲沿走线奔跑，扫描光带从板面掠过，中央处理器的引脚随鼓点闪亮，上方悬着一圈旋转的全息环，中央升起锁链双螺旋。
 import * as THREE from 'three';
 import { PAL, col, glowSprite, rng, smooth, lerp, clamp } from '../lib.js';
+import { makeLyricLayer } from '../cyber.js';
 import { makeDNA } from '../dna.js';
 
 const HALF = 60, GRID = 1.2;
@@ -24,8 +27,11 @@ function dieTexture() {
   g.strokeStyle = 'rgba(63,246,255,0.35)'; g.lineWidth = 2;
   for (let i = 0; i <= S; i += 16) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i, S); g.stroke(); g.beginPath(); g.moveTo(0, i); g.lineTo(S, i); g.stroke(); }
   g.strokeStyle = '#ff2f8f'; g.lineWidth = 8; g.strokeRect(24, 24, S - 48, S - 48);
-  g.fillStyle = '#7ff9ff'; g.font = '700 46px Consolas, "Courier New", monospace'; g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.fillText('CORE', S / 2, S / 2);
+  // 芯片中间的字：Michroma 科技感字体，字号自动缩放，保证不超出芯片边框
+  let fs = 92; g.font = `400 ${fs}px Michroma, sans-serif`; if ('letterSpacing' in g) g.letterSpacing = '8px';
+  while (g.measureText('GHOST').width > 380 && fs > 24) { fs -= 4; g.font = `400 ${fs}px Michroma, sans-serif`; }
+  g.textAlign = 'center'; g.textBaseline = 'middle'; g.shadowColor = '#3ff6ff'; g.shadowBlur = 18;
+  g.fillStyle = '#7ff9ff'; g.fillText('GHOST', S / 2 + 4, S / 2);
   const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; return tex;
 }
 
@@ -40,10 +46,10 @@ export function create(ctx) {
 
   // 走线：正交折线（曼哈顿路由）
   const traces = [];
-  for (let i = 0; i < 260; i++) {
+  for (let i = 0; i < 300; i++) {
     let x = snap((R() - 0.5) * 2 * HALF), z = snap((R() - 0.5) * 2 * HALF);
     const pts = [[x, z]]; let horiz = R() < 0.5;
-    const steps = 3 + Math.floor(R() * 6);
+    const steps = 3 + Math.floor(R() * 7);
     for (let s = 0; s < steps; s++) {
       const len = snap((R() - 0.5) * 36);
       if (horiz) x = clampH(x + len); else z = clampH(z + len);
@@ -84,7 +90,7 @@ export function create(ctx) {
 
   // 芯片与引脚
   const CHIPS = [];
-  for (let i = 0; i < 46; i++) {
+  for (let i = 0; i < 52; i++) {
     const cx = snap((R() - 0.5) * 2 * (HALF - 6)), cz = snap((R() - 0.5) * 2 * (HALF - 6));
     if (Math.abs(cx) < 12 && Math.abs(cz) < 12) continue;
     CHIPS.push({ cx, cz, w: 2.4 + Math.floor(R() * 4) * 1.2, d: 1.8 + Math.floor(R() * 3) * 1.2, pins: 4 + Math.floor(R() * 5) * 2 });
@@ -106,7 +112,7 @@ export function create(ctx) {
 
   // 电容（银色小圆柱）
   const CAPS = [];
-  for (let i = 0; i < 90; i++) CAPS.push([snap((R() - 0.5) * 2 * (HALF - 3)), snap((R() - 0.5) * 2 * (HALF - 3)), R() < 0.5 ? 0 : Math.PI / 2]);
+  for (let i = 0; i < 100; i++) CAPS.push([snap((R() - 0.5) * 2 * (HALF - 3)), snap((R() - 0.5) * 2 * (HALF - 3)), R() < 0.5 ? 0 : Math.PI / 2]);
   const capGeo = new THREE.CylinderGeometry(0.16, 0.16, 0.42, 8); capGeo.rotateZ(Math.PI / 2);
   const caps = new THREE.InstancedMesh(capGeo, new THREE.MeshBasicMaterial({ color: 0xbfd0d8, toneMapped: false }), CAPS.length);
   CAPS.forEach(([x, z, ry], i) => { dummy.position.set(x, 0.16, z); dummy.rotation.set(0, ry, 0); dummy.scale.set(1, 1, 1); dummy.updateMatrix(); caps.setMatrixAt(i, dummy.matrix); });
@@ -125,21 +131,46 @@ export function create(ctx) {
   const dpMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.22, 0.12, 0.7), new THREE.MeshBasicMaterial({ color: 0xffd98a, toneMapped: false }), DP.length);
   scene.add(dpMesh);
   const core = glowSprite('63,246,255', 34, 0.3); core.position.set(0, 1.6, 0); scene.add(core);
-  // 从处理器中央升起的锁链双螺旋（DNA 式意向）：灵魂与结构缠绕
+
+  // 上方的全息环（绕处理器旋转）
+  const holoG = new THREE.Group(); holoG.position.y = 5.5; scene.add(holoG);
+  const holo = new THREE.Mesh(new THREE.TorusGeometry(8.5, 0.035, 6, 140), new THREE.MeshBasicMaterial({ color: PAL.cyan, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+  holo.rotation.x = -Math.PI / 2; holoG.add(holo);
+  const holo2 = new THREE.Mesh(new THREE.TorusGeometry(11, 0.02, 6, 160), new THREE.MeshBasicMaterial({ color: 0xffd98a, transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+  holo2.rotation.x = -Math.PI / 2; holoG.add(holo2);
+
+  // 中央升起的锁链双螺旋（DNA 式意向）
   const dna = makeDNA(ctx.env, { height: 14, radius: 3.4, turns: 2.5, links: 110, scale: 0.6 }); dna.group.position.set(0, 1.6, 0); scene.add(dna.group);
 
+  // 扫描光带：从板面掠过
+  const scan = glowSprite('63,246,255', 120, 0.22); scan.rotation.x = -Math.PI / 2; scan.scale.set(1, 0.1, 1); scan.position.y = 2; scene.add(scan);
+
   // 信号脉冲：沿走线奔跑
-  const P = 180;
-  const pulses = []; for (let i = 0; i < P; i++) pulses.push({ tr: Math.floor(R() * TR.length), ph: R(), sp: 8 + R() * 16 });
-  const pulseMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.9, 0.14, 0.14), new THREE.MeshBasicMaterial({ toneMapped: false, blending: THREE.AdditiveBlending, depthWrite: false }), P);
-  for (let i = 0; i < P; i++) pulseMesh.setColorAt(i, new THREE.Color(i % 2 ? PAL.cyan : PAL.pink).multiplyScalar(2.2));
+  const P = 380;
+  const pulses = []; for (let i = 0; i < P; i++) pulses.push({ tr: Math.floor(R() * TR.length), ph: R(), sp: 10 + R() * 18 });
+  const pulseMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1.6, 0.16, 0.16), new THREE.MeshBasicMaterial({ toneMapped: false, blending: THREE.AdditiveBlending, depthWrite: false }), P);
+  for (let i = 0; i < P; i++) pulseMesh.setColorAt(i, new THREE.Color(i % 2 ? PAL.cyan : 0xffd98a).multiplyScalar(2.2));
   scene.add(pulseMesh);
 
-  function update({ t, f, S, post }) {
-    const e = smooth(0, 1, S.p || 0);
-    const ang = t * 0.09, Rr = lerp(46, 26, e), H = lerp(58, 24, e);
-    camera.position.set(Math.cos(ang) * Rr, H + Math.sin(t * 0.4) * 0.6 + f.kick * 0.4, Math.sin(ang) * Rr);
-    camera.lookAt(Math.cos(ang + 0.6) * 4, 0, Math.sin(ang + 0.6) * 4);
+  // 歌词层（3:05 之后的脉冲段有歌词时才显示）
+  const lyr = makeLyricLayer(ctx, camera, scene, { heroColor: 0xffd6ef, outline: PAL.cyan, heroY: -0.3 });
+
+  function update({ t, f, S, k, post, sec }) {
+    const alt = sec && sec.mode === 'alt';
+    if (alt) {
+      // 低空向前穿行：左右蜿蜒，掠过走线与芯片
+      const lt = S.lt;
+      const pz = 46 - lt * 2.6, px = Math.sin(lt * 0.6) * 26;
+      camera.position.set(px, 14 + Math.sin(lt * 0.4) * 2.5 + f.kick * 0.4, pz);
+      camera.lookAt(px * 0.5 + Math.sin(lt * 0.9) * 4, 0, pz - 30);
+      camera.rotation.z += Math.sin(lt * 0.7) * 0.05;
+    } else {
+      // 绕板子俯冲旋转
+      const e = smooth(0, 1, S.p || 0);
+      const ang = t * 0.09, Rr = lerp(46, 26, e), H = lerp(58, 24, e);
+      camera.position.set(Math.cos(ang) * Rr, H + Math.sin(t * 0.4) * 0.6 + f.kick * 0.4, Math.sin(ang) * Rr);
+      camera.lookAt(Math.cos(ang + 0.6) * 4, 0, Math.sin(ang + 0.6) * 4);
+    }
     camera.fov = 55 + f.kick * 2; camera.updateProjectionMatrix();
 
     for (let i = 0; i < P; i++) {
@@ -154,14 +185,18 @@ export function create(ctx) {
     pulseMesh.instanceMatrix.needsUpdate = true;
 
     DP.forEach((d, i) => {
-      const k = 1 + f.kick * 1.6 * (0.5 + 0.5 * Math.sin(t * 7 + d.ph));
-      dummy.position.set(d.x, 0.2, d.z); dummy.rotation.set(0, d.rotY, 0); dummy.scale.set(1, k, 1); dummy.updateMatrix(); dpMesh.setMatrixAt(i, dummy.matrix);
+      const k2 = 1 + f.kick * 1.6 * (0.5 + 0.5 * Math.sin(t * 7 + d.ph));
+      dummy.position.set(d.x, 0.2, d.z); dummy.rotation.set(0, d.rotY, 0); dummy.scale.set(1, k2, 1); dummy.updateMatrix(); dpMesh.setMatrixAt(i, dummy.matrix);
     });
     dpMesh.instanceMatrix.needsUpdate = true;
     core.material.opacity = 0.25 + f.kick * 0.25;
-    dna.update(t, f, smooth(0.12, 0.6, S.p || 0));
 
-    const s = post.s; s.bloom = 0.45 + f.kick * 0.25; s.glitch = Math.max(s.glitch, f.hit * 0.3); s.ab = 0.002 + f.hit * 0.004; s.scan = 0.1; s.track = 0.2;
+    holoG.rotation.y = t * 0.5; holo.material.opacity = 0.5 + f.kick * 0.3; holo2.material.opacity = 0.3 + f.kick * 0.25;
+    scan.position.z = ((t * 14) % 150) - 75; scan.material.opacity = 0.18 + f.kick * 0.1;
+    dna.update(t, f, smooth(0.12, 0.6, S.p || 0));
+    lyr.update(k, t, f);
+
+    const s = post.s; s.bloom = 0.42 + f.kick * 0.22; s.glitch = Math.max(s.glitch, f.hit * 0.3); s.ab = 0.002 + f.hit * 0.004; s.scan = 0.1; s.track = 0.2;
   }
   return { scene, camera, update };
 }

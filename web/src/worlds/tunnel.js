@@ -44,11 +44,11 @@ export function create(ctx) {
   const portal = glowSprite('255,235,235', 90, 1); portal.position.set(0, 0, -205); scene.add(portal);
   const portal2 = glowSprite('255,70,150', 220, 0.8); portal2.position.set(0, 0, -208); scene.add(portal2);
   scene.add(makeStars(600, 220, 1.2, 3).translateZ(-100));
-  const lyr = makeLyricLayer(ctx, camera, scene, { heroColor: 0xffd6ef, outline: PAL.cyan, heroY: -0.3 });
+  const lyr = makeLyricLayer(ctx, camera, scene, { heroColor: 0xffd6ef, outline: PAL.cyan, heroY: -0.3, hold: true });
 
   const geoC = {}; const getG = (ch) => geoC[ch] || (geoC[ch] = glyphGeo(ctx.atlasF, ch, 2.1, 2.1));
   const SPEED = 24;   // 原来是 42，放慢到约一半
-  function update({ t, f, S, k, post }) {
+  function update({ t, f, S, k, post, sec }) {
     const flat = k.flat.length ? k.flat : ['ア'];
     const dist = t * SPEED, off = dist % LEN;
     rings.forEach((r) => {
@@ -65,8 +65,15 @@ export function create(ctx) {
     lines.material.uniforms.uT.value = t; lines.material.uniforms.uSpeed.value = SPEED * 1.8; lines.material.uniforms.uLen.value = 5 + f.low * 8;
     portal.material.opacity = 0.8 + f.kick * 0.2; portal.scale.setScalar(1 + f.kick * 0.1 + Math.sin(t * 3) * 0.03);
     lyr.update(k, t, f);
-    camera.position.set(Math.sin(t * 0.4) * 0.6, Math.cos(t * 0.3) * 0.5, 4);
-    camera.lookAt(0, 0, -50); camera.rotation.z = Math.sin(t * 0.45) * 0.12 + f.kick * 0.02;
+    if (sec && sec.mode === 'apex') {
+      // 副歌 3：镜头在锁链之间左右晃动、向前穿行
+      camera.position.set(Math.sin(t * 0.9) * 3.0, Math.cos(t * 0.7) * 2.2, 4 + Math.sin(t * 0.5) * 2);
+      camera.lookAt(Math.sin(t * 0.9 + 1.2) * 2.2, Math.cos(t * 0.7 + 0.6) * 1.6, -50);
+      camera.rotation.z += Math.sin(t * 1.1) * 0.16 + f.kick * 0.02;
+    } else {
+      camera.position.set(Math.sin(t * 0.4) * 0.6, Math.cos(t * 0.3) * 0.5, 4);
+      camera.lookAt(0, 0, -50); camera.rotation.z = Math.sin(t * 0.45) * 0.12 + f.kick * 0.02;
+    }
     camera.fov = 72 + f.kick * 7; camera.updateProjectionMatrix();
     const s = post.s; s.bloom = 1.0 + f.kick * 0.4; s.bloomR = 0.6; s.glitch = Math.max(s.glitch, f.hit * 0.38); s.ab = 0.0045 + f.hit * 0.003 + f.kick * 0.0015; s.warp = 0.1; s.track = 0.2;
     s.flash = [f.kick * 0.05, f.kick * 0.015, f.kick * 0.04];
