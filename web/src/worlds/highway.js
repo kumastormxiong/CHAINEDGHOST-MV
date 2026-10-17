@@ -10,6 +10,8 @@ const MODES = {
   apex:   { top: 0x0a0020, mid: 0x7a1060, hor: 0xffa860, speed: 46, rise: [1, 1], glitch: 0.5, bloom: 0.68, hero: 28 }
 };
 
+const topLayer = (o) => { o.renderOrder = 30; if (o.material) { o.material.depthTest = false; o.material.depthWrite = false; } };
+
 export function create(ctx) {
   const scene = new THREE.Scene(); scene.background = col(0x05000c);
   scene.fog = new THREE.Fog(0xb02a70, 40, 340);
@@ -48,8 +50,9 @@ export function create(ctx) {
   // 天空里的巨大假名
   const heroF = makeGlyphBank(ctx.atlasF, 0xffb4de, 1, 1), heroO = makeGlyphBank(ctx.atlasO, PAL.cyan, 1, 0.9);
   const heroOP = makeGlyphBank(ctx.atlasO, PAL.pink, 1, 0.6);
-  [heroF, heroO, heroOP].forEach(b => scene.add(b.group));
+  [heroF, heroO, heroOP].forEach(b => { scene.add(b.group); b.group.traverse(topLayer); });
   const tmpA = new THREE.Color(), tmpB = new THREE.Color();
+  // 歌词字形置于最顶层：不做深度测试，渲染顺序最后，不会被地面网格切入
 
   function update({ t, f, S, k, post, sec }) {
     const M = MODES[sec.mode] || MODES.chorus;
@@ -66,11 +69,11 @@ export function create(ctx) {
     const flat = k.flat, ci = k.i, ch = ci >= 0 ? flat[ci] : null;
     const age = ci >= 0 ? k.age : 9, pop = Math.exp(-age * 6);
     const sc = M.hero * (1 + pop * 0.28 + f.kick * 0.06);
-    for (const b of [heroF, heroO, heroOP]) b.group.visible = !!ch;
+    for (const b of [heroF, heroO, heroOP]) { b.group.visible = !!ch; b.group.traverse(topLayer); }
     if (ch && ch in heroF.map) {
-      const a = heroF.show(ch, 0.38 + 0.2 * pop); a.scale.setScalar(sc); a.position.set(0, 17 + sc * 0.25 + Math.sin(t * 0.9) * 0.3, -52);
-      const b = heroO.show(ch, 0.9); b.scale.setScalar(sc * 1.07); b.position.set(0.5 + pop * 0.8, 16.8 + sc * 0.25, -53);
-      const c = heroOP.show(ch, 0.5); c.scale.setScalar(sc * 1.16); c.position.set(-0.7 - pop * 1.0, 17.3 + sc * 0.25, -54);
+      const a = heroF.show(ch, 0.26 + 0.12 * pop); a.scale.setScalar(sc); a.position.set(0, -1 + sc * 0.25 + Math.sin(t * 0.9) * 0.3, -52);
+      const b = heroO.show(ch, 0.55); b.scale.setScalar(sc * 1.07); b.position.set(0.5 + pop * 0.8, -1.2 + sc * 0.25, -53);
+      const c = heroOP.show(ch, 0.32); c.scale.setScalar(sc * 1.16); c.position.set(-0.7 - pop * 1.0, -0.8 + sc * 0.25, -54);
     }
     eyesF.update(t, camera, { opacity: sec.mode === 'pre' ? 0 : sec.mode === 'chorus' ? 0.7 : 0.9, appear: sec.mode === 'pre' ? 0 : smooth(0.05, 0.6, S.p), kick: f.kick });
     cf.update(t, f); bf.update(t, f);

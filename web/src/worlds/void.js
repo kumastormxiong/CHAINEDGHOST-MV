@@ -3,6 +3,49 @@ import * as THREE from 'three';
 import { PAL, col, JP_FONT, makeStars, makeGrid, makeGhost, glowSprite, textMesh, smooth, clamp, rng } from '../lib.js';
 import { makeChain } from '../lib.js';
 
+// 光圈外侧的散开粒子：沿光圈向外渐渐散开并淡出，颜色粉青渐变；关闭深度测试，层叠在剪影之上
+const ringDustMat = (c1, c2, a, spread, speed) => new THREE.ShaderMaterial({
+  uniforms: { uT: { value: 0 }, uK: { value: 0 }, uA: { value: a }, uR: { value: 6.6 }, uSpread: { value: spread }, uSpeed: { value: speed }, uC1: { value: col(c1) }, uC2: { value: col(c2) } },
+  vertexShader: `
+    attribute float aAng; attribute float aSeed;
+    uniform float uT,uK,uA,uR,uSpread,uSpeed;
+    varying float vA; varying float vS;
+    void main(){
+      float life=fract(uT*uSpeed+aSeed);
+      float ang=aAng+uT*0.1*(0.6+aSeed)+life*0.7;
+      float rad=uR*(0.99+0.02*sin(aSeed*31.0))+life*uSpread*(0.5+0.9*aSeed);
+      vec2 p=vec2(cos(ang),sin(ang))*rad;
+      gl_Position=projectionMatrix*modelViewMatrix*vec4(p,0.0,1.0);
+      float fade=smoothstep(0.0,0.12,life)*pow(1.0-life,1.6);
+      float ok=step(5.9,rad);
+      vA=uA*fade*ok*(0.55+0.45*sin(uT*2.0+aSeed*40.0))*(1.0+uK*0.4);
+      gl_PointSize=(3.0+7.0*aSeed)*(1.0+life*1.8);
+      vS=aSeed;
+    }`,
+  fragmentShader: `
+    uniform vec3 uC1,uC2; varying float vA; varying float vS;
+    void main(){
+      float d=length(gl_PointCoord-0.5);
+      float a=smoothstep(0.5,0.0,d); a*=a;
+      vec3 c=mix(uC1,uC2,vS);
+      gl_FragColor=vec4(c*a*vA*2.6,a*vA);
+    }`,
+  transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, toneMapped: false,
+});
+
+const makeRingDust = (c1, c2, a, spread, speed, n, seed) => {
+  const R = rng(seed);
+  const g = new THREE.BufferGeometry();
+  const pos = new Float32Array(n * 3), ang = new Float32Array(n), sd = new Float32Array(n);
+  for (let i = 0; i < n; i++) { ang[i] = R() * Math.PI * 2; sd[i] = R(); }
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('aAng', new THREE.BufferAttribute(ang, 1));
+  g.setAttribute('aSeed', new THREE.BufferAttribute(sd, 1));
+  const m = new THREE.Points(g, ringDustMat(c1, c2, a, spread, speed));
+  m.frustumCulled = false; m.renderOrder = 20;
+  return m;
+};
+
 export function create(ctx) {
   const scene = new THREE.Scene(); scene.background = col(0x05010b);
   const camera = new THREE.PerspectiveCamera(50, 16 / 9, 0.1, 800);
@@ -19,14 +62,14 @@ export function create(ctx) {
   const ring = new THREE.Mesh(new THREE.TorusGeometry(6.6, 0.085, 12, 200), new THREE.MeshBasicMaterial({ color: PAL.magenta, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, toneMapped: false }));
   ring.position.set(0, 5.0, -2.5); scene.add(ring);
   const ring2 = ring.clone(); ring2.scale.setScalar(1.18); ring2.material = ring.material.clone(); ring2.material.color.set(PAL.cyan); ring2.material.opacity = 0.45; scene.add(ring2);
-  // 光圈拖影：几层渐淡的副本，旋转比本体滞后
-  const trails = [];
-  [[ring, PAL.magenta, 1], [ring2, PAL.cyan, -1]].forEach(([src, c, dir]) => {
-    for (let i = 1; i <= 4; i++) {
-      const m = new THREE.Mesh(src.geometry, new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.22 / i, blending: THREE.AdditiveBlending, toneMapped: false, depthWrite: false }));
-      scene.add(m); trails.push({ m, src, i, dir });
-    }
-  });
+  // 光圈拖影：连续渐变的散开粒子，跟随光圈的位置、朝向与缩放，层叠在剪影之上
+  const trails = [
+    { m: makeRingDust(PAL.magenta, PAL.cyan, 0.9, 5.0, 0.2, 1600, 7), src: ring },
+    { m: makeRingDust(PAL.magenta, PAL.cyan, 0.5, 7.0, 0.13, 1100, 19), src: ring },
+    { m: makeRingDust(PAL.cyan, PAL.magenta, 0.8, 5.0, 0.18, 1600, 31), src: ring2 },
+    { m: makeRingDust(PAL.cyan, PAL.magenta, 0.4, 7.0, 0.12, 1100, 43), src: ring2 },
+  ];
+  trails.forEach(({ m }) => scene.add(m));
 
   const chain = makeChain(260, ctx.env); scene.add(chain.mesh);
   const key = new THREE.DirectionalLight(0xff7ac8, 1.2); key.position.set(-6, 8, 8); scene.add(key);
@@ -58,9 +101,9 @@ export function create(ctx) {
     u.uFade.value = smooth(0.4, 3.0, lt); ghost.position.y = 4.9 + Math.sin(t * 0.8) * 0.18;
     ring.rotation.z = t * 0.12; ring.rotation.x = Math.sin(t * 0.3) * 0.25; ring2.rotation.z = -t * 0.08; ring2.rotation.y = t * 0.2;
     ring.scale.setScalar(1 + f.kick * 0.05);
-    trails.forEach(({ m, src, i, dir }) => {
-      m.position.copy(src.position); m.scale.setScalar(src.scale.x * (1 - i * 0.012));
-      m.rotation.set(src.rotation.x - i * 0.05 * dir, src.rotation.y - i * 0.06 * (dir < 0 ? 1 : 0), src.rotation.z - i * 0.09 * dir);
+    trails.forEach(({ m, src }) => {
+      m.position.copy(src.position); m.rotation.copy(src.rotation); m.scale.copy(src.scale);
+      m.material.uniforms.uT.value = t; m.material.uniforms.uK.value = f.kick;
     });
     // 锁链螺旋：随时间长出来
     const grow = smooth(1.5, 12, lt);

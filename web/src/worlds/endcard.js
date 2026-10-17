@@ -1,5 +1,5 @@
 
-// 场景 endcard：落版。只有你的头像和「虚空造物」。红蓝光圈为平面光环：不倾斜、不前后翻转，只转动、呼吸缩放与流动光带，全部在头像外侧。
+// 场景 endcard：落版。只有你的头像和「虚空造物」。红蓝光圈为平面光环：不倾斜、不前后翻转，只转动、呼吸缩放与流动光带，全部在头像外侧。拖影为连续的梦幻渐变。
 import * as THREE from 'three';
 import { PAL, col, JP_FONT, makeStars, makeGrid, glowSprite, textMesh, smooth, clamp } from '../lib.js';
 
@@ -21,6 +21,26 @@ const ringMat = (c, a, R) => new THREE.ShaderMaterial({
   transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
 });
 
+// 拖影着色器：在光圈内侧拉出一段连续渐变的光带（粉 ↔ 青 沿圆周与时间平滑混合，亮度沿长度渐隐），无分层边界
+const trailMat = (c1, c2, a, R, L) => new THREE.ShaderMaterial({
+  uniforms: { uT: { value: 0 }, uK: { value: 0 }, uA: { value: a }, uC1: { value: col(c1).multiplyScalar(0.8) }, uC2: { value: col(c2).multiplyScalar(0.8) }, uR: { value: R }, uL: { value: L } },
+  vertexShader: 'varying vec2 vP;varying vec3 vW;void main(){vP=position.xy;vW=(modelMatrix*vec4(position,1.0)).xyz;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
+  fragmentShader: `uniform float uT,uA,uR,uL;uniform vec3 uC1,uC2;varying vec2 vP;varying vec3 vW;
+    void main(){
+      if(length(vW.xy-vec2(0.0,2.6))<3.3) discard;   // 头像范围内不画
+      float d=length(vP)-uR;                            // 负值为光圈内侧
+      float x=clamp(-d/uL,0.0,1.0);                     // 0 贴近光圈，1 为拖影末端
+      float ang=atan(vP.y,vP.x);
+      float inside=step(d,0.0)*(1.0-x)*(1.0-x);
+      float edge=exp(-d*d*60.0)*0.6;
+      float band=inside+edge;
+      float m=0.5+0.5*sin(ang*2.0+uT*0.9+x*3.0);        // 连续的梦幻色相过渡
+      vec3 c=mix(uC1,uC2,m)*band*(0.75+0.25*sin(x*9.0-uT*2.0));
+      gl_FragColor=vec4(c,uA*band);
+    }`,
+  transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+});
+
 export function create(ctx) {
   const scene = new THREE.Scene(); scene.background = col(0x03000a);
   const camera = new THREE.PerspectiveCamera(45, 16 / 9, 0.1, 300); camera.position.set(0, 1.4, 17);
@@ -38,24 +58,25 @@ export function create(ctx) {
   const ringState = (kind, tt) => kind === 'P'
     ? { rot: [0, 0, tt * 0.22], sc: 1 + 0.035 * Math.sin(tt * 1.1) }
     : { rot: [0, 0, -tt * 0.26], sc: 1 + 0.03 * Math.sin(tt * 1.3 + 1.7) };
-  // 同一套状态函数驱动光圈本体与拖影（拖影按 lag 滞后、按 shrink 收小）
-  const place = (m, kind, tt, lag, shrink, alpha, kick) => {
-    const tl = tt - lag, st = ringState(kind, tl);
+  // 同一套状态函数驱动光圈本体与拖影（拖影按 lag 滞后）
+  const place = (m, kind, tt, alpha, kick) => {
+    const st = ringState(kind, tt);
     m.rotation.set(st.rot[0], st.rot[1], st.rot[2]);
     m.position.set(0, 2.6, 0);
-    m.scale.setScalar(st.sc * (1 + kick * 0.02) * (1 - shrink));
-    m.material.uniforms.uT.value = tl; m.material.uniforms.uA.value = alpha; m.material.uniforms.uK.value = kick;
+    m.scale.setScalar(st.sc * (1 + kick * 0.02));
+    m.material.uniforms.uT.value = tt; m.material.uniforms.uA.value = alpha; m.material.uniforms.uK.value = kick;
   };
   const ringGeo = new THREE.PlaneGeometry(11.6, 11.6);
   const ringP = new THREE.Mesh(ringGeo, ringMat(RING.P.c, RING.P.a, RING.P.r)); scene.add(ringP);
   const ringC = new THREE.Mesh(ringGeo, ringMat(RING.C.c, RING.C.a, RING.C.r)); scene.add(ringC);
-  // 拖影：几层渐淡的副本，共用几何体
-  const trails = [];
-  [['P', ringP], ['C', ringC]].forEach(([kind, src]) => {
-    for (let i = 1; i <= 4; i++) {
-      const m = new THREE.Mesh(src.geometry, ringMat(RING[kind].c, 0.3 / i, RING[kind].r)); scene.add(m); trails.push({ m, kind, i });
-    }
-  });
+  // 连续梦幻渐变拖影：每个光圈两层，长度与滞后不同，颜色在粉青之间过渡
+  const trails = [
+    { m: new THREE.Mesh(ringGeo, trailMat(PAL.pink, PAL.cyan, 0.4, RING.P.r, 0.6)), kind: 'P', lag: 0.25, a: 0.4 },
+    { m: new THREE.Mesh(ringGeo, trailMat(PAL.pink, PAL.cyan, 0.22, RING.P.r, 0.45)), kind: 'P', lag: 0.6, a: 0.22 },
+    { m: new THREE.Mesh(ringGeo, trailMat(PAL.cyan, PAL.pink, 0.3, RING.C.r, 0.7)), kind: 'C', lag: 0.25, a: 0.3 },
+    { m: new THREE.Mesh(ringGeo, trailMat(PAL.cyan, PAL.pink, 0.16, RING.C.r, 0.5)), kind: 'C', lag: 0.6, a: 0.16 },
+  ];
+  trails.forEach((tr) => scene.add(tr.m));
   const name = textMesh('虚空造物', 1.9, { font: JP_FONT, weight: '900', chrome: true, size: 220, glow: '#ff2f8f', stroke: '#ff2f8f', strokeW: 4, spacing: 36 }, false);
   name.position.set(0, -2.7, 0); scene.add(name);
   const nameG = name.clone(); nameG.material = name.material.clone(); nameG.material.blending = THREE.AdditiveBlending; nameG.scale.setScalar(1.012); nameG.position.set(0.05, -2.7, -0.05); scene.add(nameG);
@@ -66,9 +87,9 @@ export function create(ctx) {
     const aA = smooth(0.2, 1.8, lt), aN = smooth(1.4, 2.8, lt);
     avatar.material.opacity = aA; avatar.scale.setScalar(0.94 + 0.06 * smooth(0.2, 2.4, lt) + f.kick * 0.012);
     halo.material.opacity = 0.3 * aA + f.kick * 0.06; haloC.material.opacity = 0.18 * aA;
-    place(ringP, 'P', t, 0, 0, 0.95 * aA, f.kick);
-    place(ringC, 'C', t, 0, 0, 0.6 * aA, f.kick);
-    trails.forEach(({ m, kind, i }) => place(m, kind, t, i * 0.08, i * 0.012, (kind === 'P' ? 0.3 : 0.2) / i * aA, f.kick));
+    place(ringP, 'P', t, 0.95 * aA, f.kick);
+    place(ringC, 'C', t, 0.6 * aA, f.kick);
+    trails.forEach((tr) => place(tr.m, tr.kind, t - tr.lag, tr.a * aA, f.kick));
     name.material.opacity = aN; nameG.material.opacity = aN * 0.3; name.position.y = -2.7 + Math.sin(t * 0.9) * 0.04; nameG.position.y = name.position.y;
     veil.material.opacity = smooth(end - 1.4, end - 0.05, lt);
     grid.material.uniforms.uTime.value = t; grid.material.uniforms.uCam.value.copy(camera.position); grid.material.uniforms.uPulse.value = f.kick * 0.3;
