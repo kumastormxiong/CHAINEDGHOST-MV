@@ -96,7 +96,7 @@ export function create(ctx) {
     wins.forEach((w, i) => {                                   // 窗口逐个弹出：缩放 + 淡入
       const a = smooth(w.d.t0, w.d.t0 + 0.4, lt);
       w.m.visible = a > 0.001; w.m.material.opacity = a;
-      w.m.scale.setScalar(3 * (0.55 + 0.45 * a + (a < 1 ? Math.sin(a * Math.PI) * 0.12 : 0)));   // 弹窗整体放大 3 倍
+      w.m.scale.setScalar(1.5 * (0.55 + 0.45 * a + (a < 1 ? Math.sin(a * Math.PI) * 0.12 : 0)));   // 弹窗整体缩小为原来的一半（相当于 1.5 倍）
       w.m.position.y = w.base.y + Math.sin(t * 0.5 + i * 2) * 0.35 + (1 - a) * 1.2;
       w.m.rotation.y = w.d.ry + Math.sin(t * 0.3 + i) * 0.05;
     });

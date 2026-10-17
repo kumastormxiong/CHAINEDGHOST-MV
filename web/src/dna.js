@@ -1,21 +1,29 @@
 // 锁链双螺旋（DNA 式结构）：两根真锁链互相缠绕成双螺旋。每一圈的宽度都不一样，
-// 并且有一道收缩/扩散的波从下往上传。另外用着色器画流动的光点，用横档表示碱基对。
+// 并且有一道收缩/扩散的波从下往上传。另外用着色器画流动的光点，用粗的发光光管表示碱基对（横档）。
 // 不含任何区块链符号或文字。
 import * as THREE from 'three';
 import { makeChain, lerp, clamp } from './lib.js';
 
-const turnWidth = (i) => 0.78 + 0.28 * Math.sin(i * 2.37 + 0.8);   // 每一圈的基础宽度各不相同
+const turnWidth = (i) => 0.78 + 0.28 * Math.sin(i * 2.37 + 0.8);   // 每一圈的基础宽度各不相同（旧版，其他场景保持不变）
+const hashN = (n) => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
+const turnWidthWide = (i) => 0.5 + 1.1 * hashN(i * 3.7 + 1.3);   // wide 模式：每一圈的目标宽度（0.5 ~ 1.6 倍）
+// wide 模式的宽度沿螺旋连续过渡（smoothstep 插值），相邻两圈之间没有突变，所以不会出现直角转弯
+const wideWidth = (uf) => {
+  const i = Math.floor(uf), f = uf - i, s = f * f * (3 - 2 * f);
+  return turnWidthWide(i) + (turnWidthWide(i + 1) - turnWidthWide(i)) * s;
+};
 
-export function makeDNA(env, { height = 14, radius = 3.4, turns = 2.5, links = 110, spin = 0.5, scale = 0.6, rungs = 18, glowN = 700 } = {}) {
+export function makeDNA(env, { height = 14, radius = 3.4, turns = 2.5, links = 110, spin = 0.5, scale = 0.6, rungs = 18, glowN = 700, wide = false } = {}) {
   const A = makeChain(links, env), B = makeChain(links, env);
   A.mesh.frustumCulled = false; B.mesh.frustumCulled = false;
   const group = new THREE.Group(); group.add(A.mesh, B.mesh);
 
-  // 螺旋上一点的位置：半径随圈数变化，并且随时间收缩、扩散
+  // 螺旋上一点的位置：半径随圈数变化，并且随时间收缩、扩散（wide 模式全部连续，没有突变）
   const point = (u, phase, t, out) => {
     const turnF = u * turns, turn = Math.floor(turnF);
-    const breathe = 1 + 0.16 * Math.sin(t * 1.4 - u * 7.0 + turn * 0.9);
-    const r = radius * turnWidth(turn) * breathe;
+    const breathe = wide ? 1 + 0.3 * Math.sin(t * 1.1 - u * 6.0 + turnF * 1.7) : 1 + 0.16 * Math.sin(t * 1.4 - u * 7.0 + turn * 0.9);
+    const sk = wide ? 1 + 0.12 * Math.sin(turnF * 2.3 + (phase > 1 ? 1.9 : 0)) : 1;   // 两根锁链各自的宽度差异
+    const r = radius * (wide ? wideWidth(turnF) : turnWidth(turn)) * breathe * sk;
     const a = turnF * Math.PI * 2 + phase + t * spin;
     return (out || new THREE.Vector3()).set(Math.cos(a) * r, lerp(0, height, u), Math.sin(a) * r);
   };
@@ -51,13 +59,41 @@ export function makeDNA(env, { height = 14, radius = 3.4, turns = 2.5, links = 1
   });
   const glow = new THREE.Points(gGeo, gMat); glow.frustumCulled = false; group.add(glow);
 
-  // 碱基对横档：两根螺旋之间的连线
-  const rPos = new Float32Array(rungs * 2 * 3);
-  const rAttr = new THREE.BufferAttribute(rPos, 3);
-  const rGeo = new THREE.BufferGeometry(); rGeo.setAttribute('position', rAttr);
-  const rMat = new THREE.LineBasicMaterial({ color: 0xbff9ff, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
-  const rungLines = new THREE.LineSegments(rGeo, rMat); rungLines.frustumCulled = false; group.add(rungLines);
-  const pa = new THREE.Vector3(), pb = new THREE.Vector3();
+  // 碱基对横档：粗的发光光管（InstancedMesh + 着色器）。光管表面有能量脉冲从 A 流向 B，边缘亮、中心略暗
+  const rr = 0.19 * Math.max(1, radius / 3.4);   // 横档半径：比之前粗得多，大尺寸时按比例加粗
+  const rungGeo = new THREE.CylinderGeometry(0.5, 0.5, 1, 12, 1, false);   // 单位高度，沿 Y 轴，之后用矩阵拉伸到两根锁链之间
+  const rungMat = new THREE.ShaderMaterial({
+    uniforms: { uT: { value: 0 }, uK: { value: 0 } },
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    vertexShader: `
+      varying float vY; varying float vR; varying float vId;
+      void main(){
+        vY = position.y;
+        vR = length(position.xz);
+        vId = float(gl_InstanceID);
+        gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: `
+      uniform float uT; uniform float uK;
+      varying float vY; varying float vR; varying float vId;
+      float hsh(float n){ return fract(sin(n * 91.7) * 43758.5453); }
+      void main(){
+        float h = hsh(vId);
+        float w = fract(vY + 0.5 - uT * (0.5 + 0.3 * h) + h * 0.7);
+        float flow = smoothstep(0.0, 0.18, w) * smoothstep(0.42, 0.18, w);
+        float rim = clamp(vR * 2.0, 0.0, 1.0);
+        float core = 0.45 + 0.55 * rim;
+        vec3 cA = vec3(0.3, 0.95, 1.0), cB = vec3(1.0, 0.3, 0.7);
+        vec3 col = mix(cA, cB, clamp(vY + 0.5, 0.0, 1.0));
+        float bright = (0.25 + 0.9 * flow + 0.9 * uK) * core;
+        gl_FragColor = vec4(col * bright * 1.6, 1.0);
+      }`,
+  });
+  const rungMesh = new THREE.InstancedMesh(rungGeo, rungMat, rungs);
+  rungMesh.frustumCulled = false; group.add(rungMesh);
+  const pa = new THREE.Vector3(), pb = new THREE.Vector3(), mid = new THREE.Vector3(), dir = new THREE.Vector3();
+  const qUp = new THREE.Vector3(0, 1, 0), quat = new THREE.Quaternion(), mtx = new THREE.Matrix4(), scl = new THREE.Vector3();
+  const ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
 
   // prog：0..1 生长进度（锁链从下往上长出来）
   function update(t, f = {}, prog = 1) {
@@ -70,13 +106,26 @@ export function makeDNA(env, { height = 14, radius = 3.4, turns = 2.5, links = 1
       gpos[k * 3] = pa.x; gpos[k * 3 + 1] = pa.y; gpos[k * 3 + 2] = pa.z;
     }
     gPosAttr.needsUpdate = true;
+    rungMat.uniforms.uT.value = t; rungMat.uniforms.uK.value = f.kick || 0;
     for (let j = 0; j < rungs; j++) {
       const u = (j + 0.5) / rungs;
-      if (u <= p) { point(u, 0, t, pa); point(u, Math.PI, t, pb); } else { pa.set(0, 0, 0); pb.set(0, 0, 0); }
-      rPos.set([pa.x, pa.y, pa.z, pb.x, pb.y, pb.z], j * 6);
+      let done = false;
+      if (u <= p) {
+        point(u, 0, t, pa); point(u, Math.PI, t, pb);
+        dir.subVectors(pb, pa);
+        const len = dir.length();
+        if (len > 1e-4) {
+          dir.divideScalar(len);
+          mid.addVectors(pa, pb).multiplyScalar(0.5);
+          quat.setFromUnitVectors(qUp, dir);
+          scl.set(rr, len, rr);
+          mtx.compose(mid, quat, scl);
+          done = true;
+        }
+      }
+      rungMesh.setMatrixAt(j, done ? mtx : ZERO);
     }
-    rAttr.needsUpdate = true;
-    rMat.opacity = 0.3 + 0.2 * Math.sin(t * 2.2) + 0.25 * (f.kick || 0);
+    rungMesh.instanceMatrix.needsUpdate = true;
   }
   return { group, update };
 }

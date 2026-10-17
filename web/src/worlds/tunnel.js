@@ -44,7 +44,7 @@ export function create(ctx) {
   const portal = glowSprite('255,235,235', 90, 1); portal.position.set(0, 0, -205); scene.add(portal);
   const portal2 = glowSprite('255,70,150', 220, 0.8); portal2.position.set(0, 0, -208); scene.add(portal2);
   scene.add(makeStars(600, 220, 1.2, 3).translateZ(-100));
-  const lyr = makeLyricLayer(ctx, camera, scene, { heroColor: 0xffd6ef, outline: PAL.cyan, heroY: -0.3, hold: true });
+  const lyr = makeLyricLayer(ctx, camera, scene, { heroColor: 0xffd6ef, outline: PAL.cyan, heroY: -0.3, hold: true, disperseAt: 125 });
 
   const geoC = {}; const getG = (ch) => geoC[ch] || (geoC[ch] = glyphGeo(ctx.atlasF, ch, 2.1, 2.1));
   const SPEED = 24;   // 原来是 42，放慢到约一半

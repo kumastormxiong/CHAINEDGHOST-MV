@@ -48,6 +48,13 @@ export function create(ctx) {
   // 文字底板：压暗背后的代码雨，让 GHOST IN THE SHELL 清晰可读
   const gitsBack = new THREE.Mesh(new THREE.PlaneGeometry(44, 9), new THREE.MeshBasicMaterial({ color: 0x05000c, transparent: true, opacity: 0, depthWrite: false, toneMapped: false }));
   gitsBack.position.set(0, 0.2, -6.5); scene.add(gitsBack);
+  // 3分34秒（本场景 lt=4.0）起：全屏黑屏 1.5 秒，中间大字 GHOST IN THE SHELL
+  const BLK0 = 4.0, BLK1 = 5.5;
+  const blk = new THREE.Mesh(new THREE.PlaneGeometry(60, 34), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0, depthTest: false, depthWrite: false, toneMapped: false }));
+  blk.position.set(0, 0, -4); blk.renderOrder = 50; blk.visible = false; scene.add(blk);
+  const bigT = textMesh('GHOST IN THE SHELL', 1, { font: '"Michroma", sans-serif', weight: '400', size: 150, fill: '#ffffff', glow: '#3ff6ff', spacing: 26 }, true);
+  bigT.scale.setScalar(34 / bigT.userData.tex.aspect); bigT.position.set(0, 0, -3.5);
+  bigT.material.depthTest = false; bigT.material.opacity = 0; bigT.renderOrder = 51; bigT.visible = false; scene.add(bigT);
   const fc = makeFlashCards(camera, scene, { dist: 4.2, seed: 9 });
 
   // 终端
@@ -64,6 +71,8 @@ export function create(ctx) {
 
   function update({ t, f, S, sec, post }) {
     const lt = S.lt, T0 = (sec.term || sec.start + 4.85) - sec.start;
+    // 黑屏窗口：淡入 0.06 秒，停留约 1.4 秒，淡出 0.12 秒
+    const bA = smooth(BLK0, BLK0 + 0.06, lt) * (1 - smooth(BLK1 - 0.12, BLK1, lt));
     const amt = smooth(0, 1.2, lt) * 0.5 + f.hit * 0.4 + f.kick * 0.25;
     fc.update(t, amt);
     drawRain(t, 0.7 + 0.3 * Math.sin(t * 0.5));
@@ -75,15 +84,17 @@ export function create(ctx) {
       m.rotation.z = Math.sin(t * 0.5 + u.ph) * 0.15;
     });
     cf.update(t, f);
-    const gA = smooth(1.2, 2.0, lt) * (1 - smooth(6.8, 7.6, lt)); const flick = 0.55 + 0.45 * Math.sin(t * 23.0 + Math.sin(t * 3.1) * 2.0);
+    const gA = smooth(5.0, 5.8, lt) * (1 - smooth(6.8, 7.6, lt)); const flick = 0.55 + 0.45 * Math.sin(t * 23.0 + Math.sin(t * 3.1) * 2.0);
     gits.material.opacity = gA * flick * (0.85 + f.kick * 0.2); gitsBack.material.opacity = gA * 0.72; gits.position.x = (hash(Math.floor(t * 14)) - 0.5) * 0.25 * f.hit;
-    term.visible = lt > T0 - 0.3;
+    blk.visible = bA > 0.001; blk.material.opacity = bA;
+    bigT.visible = bA > 0.001; bigT.material.opacity = bA * (0.9 + 0.1 * Math.sin(t * 37.0)); bigT.position.x = (hash(Math.floor(t * 14)) - 0.5) * 0.12 * f.hit;
+    term.visible = lt > T0 - 0.3 && bA < 0.001;
     if (term.visible) drawTerm(lt, t, T0);
     camera.position.set(Math.sin(t * 13.1) * 0.1 * (0.3 + f.hit), Math.sin(t * 9.7) * 0.08, 14);
     camera.lookAt(0, 0, 0);
     camera.fov = 60 + f.kick * 4; camera.updateProjectionMatrix();
     const s = post.s; s.bloom = 0.55 + f.kick * 0.2; s.glitch = Math.max(s.glitch, 0.12 + f.hit * 0.35); s.ab = 0.006 + f.hit * 0.01; s.scan = 0.2; s.track = 0.5;
-    s.flash = [amt * 0.02, 0, amt * 0.02];
+    s.flash = [amt * 0.02 * (1 - bA), 0, amt * 0.02 * (1 - bA)];
   }
   return { scene, camera, update };
 }

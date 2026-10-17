@@ -11,7 +11,7 @@ export function create(ctx) {
   scene.add(new THREE.AmbientLight(0x443355, 1.0));
 
   const grid = makeGrid({ y: -12, speed: 6, scale: 3, colA: PAL.cyan, colB: PAL.magenta }); grid.material.uniforms.uFog.value = 0.02; scene.add(grid);
-  const dna = makeDNA(ctx.env, { height: 36, radius: 6.6, turns: 3.2, links: 240, spin: 0.25, scale: 0.7 });
+  const dna = makeDNA(ctx.env, { height: 36, radius: 6.6, turns: 3.2, links: 240, spin: 0.25, scale: 0.7, wide: true });
   dna.group.position.set(0, -12, 0); scene.add(dna.group);
   const halo = glowSprite('63,246,255', 60, 0.25); halo.position.set(0, 2, -12); scene.add(halo);
   const cf = makeCyberField({ n: 0, codes: 6, box: [60, 30, 200], seed: 88 }); scene.add(cf.group);

@@ -1,18 +1,22 @@
-// 场景 endcard：落版。只有你的头像和「虚空造物」。红蓝光圈为三维着色器光环：倾斜翻转、前后起伏、呼吸缩放、流动光带。
+
+// 场景 endcard：落版。只有你的头像和「虚空造物」。红蓝光圈为平面光环：不倾斜、不前后翻转，只转动、呼吸缩放与流动光带，全部在头像外侧。
 import * as THREE from 'three';
 import { PAL, col, JP_FONT, makeStars, makeGrid, glowSprite, textMesh, smooth, clamp } from '../lib.js';
 
-// 三维光圈着色器：边缘菲涅尔发光 + 沿圆周流动的光带 + 扫描亮点（加法混合，不写深度）
-const ringMat = (c, a) => new THREE.ShaderMaterial({
-  uniforms: { uT: { value: 0 }, uA: { value: a }, uC: { value: col(c).multiplyScalar(1.5) }, uK: { value: 0 } },
-  vertexShader: 'varying vec2 vUv;varying vec3 vN;void main(){vUv=uv;vN=normalize(normalMatrix*normal);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
-  fragmentShader: `uniform float uT,uA,uK;uniform vec3 uC;varying vec2 vUv;varying vec3 vN;
+// 平面光圈着色器：圆环形光带（中心半径 uR，宽度 uW）+ 沿圆周流动的光带 + 扫描亮点（加法混合，不写深度）
+const ringMat = (c, a, R) => new THREE.ShaderMaterial({
+  uniforms: { uT: { value: 0 }, uA: { value: a }, uC: { value: col(c).multiplyScalar(0.85) }, uK: { value: 0 }, uR: { value: R }, uW: { value: 0.09 } },
+  vertexShader: 'varying vec2 vP;varying vec3 vW;void main(){vP=position.xy;vW=(modelMatrix*vec4(position,1.0)).xyz;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
+  fragmentShader: `uniform float uT,uA,uK,uR,uW;uniform vec3 uC;varying vec2 vP;varying vec3 vW;
     void main(){
-      float fres=pow(clamp(1.0-abs(vN.z),0.0,1.0),1.5);
-      float flow=0.5+0.5*sin(vUv.x*84.0-uT*3.2+sin(vUv.x*9.0+uT)*2.0);
-      float spark=smoothstep(0.92,1.0,0.5+0.5*sin(vUv.x*36.0-uT*5.5));
-      vec3 c=uC*((0.5+0.5*fres)*(0.55+0.45*flow)+spark*0.9+uK*0.7);
-      gl_FragColor=vec4(c,uA*(0.3+0.7*fres)*(0.85+0.15*flow));
+      if(length(vW.xy-vec2(0.0,2.6))<3.3) discard;   // 头像范围内不画光圈，只在头像外侧动画
+      float d=abs(length(vP)-uR);
+      float band=exp(-d*d/(uW*uW*2.0))+0.22*exp(-d*d/0.6);
+      float ang=atan(vP.y,vP.x);
+      float flow=0.5+0.5*sin(ang*84.0-uT*3.2+sin(ang*9.0+uT)*2.0);
+      float spark=smoothstep(0.92,1.0,0.5+0.5*sin(ang*36.0-uT*5.5));
+      vec3 c=uC*band*((0.5+0.35*flow)+spark*0.35+uK*0.3);
+      gl_FragColor=vec4(c,uA*band*(0.85+0.15*flow));
     }`,
   transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
 });
@@ -26,29 +30,30 @@ export function create(ctx) {
 
   const halo = glowSprite('255,70,170', 20, 0.55); halo.position.set(0, 2.6, -1); scene.add(halo);
   const haloC = glowSprite('63,246,255', 15, 0.3); haloC.position.set(1.2, 2.2, -1.2); scene.add(haloC);
-  // 头像不写深度：光圈从它前后穿过时不会被方形边缘切掉
+  // 头像不写深度：光圈从它旁边经过时不会被方形边缘切掉
   const avatar = new THREE.Mesh(new THREE.PlaneGeometry(7.2, 7.2), new THREE.MeshBasicMaterial({ map: ctx.avatarTex, transparent: true, toneMapped: false, color: 0x8c88a8, depthWrite: false })); avatar.position.set(0, 2.6, 0); scene.add(avatar);
 
-  // 三维光圈：各自倾角、转动、前后起伏、呼吸缩放
+  // 平面光圈：与头像同一平面（z=0），只做转动与小幅呼吸缩放；缩放后的内圈始终大于头像圆盘半径
   const RING = { P: { r: 4.05, c: PAL.pink, a: 0.95 }, C: { r: 4.35, c: PAL.cyan, a: 0.6 } };
   const ringState = (kind, tt) => kind === 'P'
-    ? { rot: [0.3 + Math.sin(tt * 0.5) * 0.4, Math.sin(tt * 0.37) * 0.6, tt * 0.22], sc: 1 + 0.07 * Math.sin(tt * 1.1), z: Math.sin(tt * 0.7) * 0.55 }
-    : { rot: [-0.35 + Math.sin(tt * 0.42) * 0.35, tt * 0.26, Math.sin(tt * 0.5) * 0.25], sc: 1 + 0.06 * Math.sin(tt * 1.3 + 1.7), z: -Math.sin(tt * 0.7) * 0.55 };
+    ? { rot: [0, 0, tt * 0.22], sc: 1 + 0.035 * Math.sin(tt * 1.1) }
+    : { rot: [0, 0, -tt * 0.26], sc: 1 + 0.03 * Math.sin(tt * 1.3 + 1.7) };
   // 同一套状态函数驱动光圈本体与拖影（拖影按 lag 滞后、按 shrink 收小）
   const place = (m, kind, tt, lag, shrink, alpha, kick) => {
     const tl = tt - lag, st = ringState(kind, tl);
     m.rotation.set(st.rot[0], st.rot[1], st.rot[2]);
-    m.position.set(0, 2.6, st.z);
+    m.position.set(0, 2.6, 0);
     m.scale.setScalar(st.sc * (1 + kick * 0.02) * (1 - shrink));
     m.material.uniforms.uT.value = tl; m.material.uniforms.uA.value = alpha; m.material.uniforms.uK.value = kick;
   };
-  const ringP = new THREE.Mesh(new THREE.TorusGeometry(RING.P.r, 0.09, 14, 240), ringMat(RING.P.c, RING.P.a)); scene.add(ringP);
-  const ringC = new THREE.Mesh(new THREE.TorusGeometry(RING.C.r, 0.09, 14, 240), ringMat(RING.C.c, RING.C.a)); scene.add(ringC);
+  const ringGeo = new THREE.PlaneGeometry(11.6, 11.6);
+  const ringP = new THREE.Mesh(ringGeo, ringMat(RING.P.c, RING.P.a, RING.P.r)); scene.add(ringP);
+  const ringC = new THREE.Mesh(ringGeo, ringMat(RING.C.c, RING.C.a, RING.C.r)); scene.add(ringC);
   // 拖影：几层渐淡的副本，共用几何体
   const trails = [];
   [['P', ringP], ['C', ringC]].forEach(([kind, src]) => {
     for (let i = 1; i <= 4; i++) {
-      const m = new THREE.Mesh(src.geometry, ringMat(RING[kind].c, 0.3 / i)); scene.add(m); trails.push({ m, kind, i });
+      const m = new THREE.Mesh(src.geometry, ringMat(RING[kind].c, 0.3 / i, RING[kind].r)); scene.add(m); trails.push({ m, kind, i });
     }
   });
   const name = textMesh('虚空造物', 1.9, { font: JP_FONT, weight: '900', chrome: true, size: 220, glow: '#ff2f8f', stroke: '#ff2f8f', strokeW: 4, spacing: 36 }, false);

@@ -143,7 +143,7 @@ export function makeDataStream(fn, { segs = 600, radius = 0.12, colors = [0xfff3
 }
 
 // ---------- 歌词层：挂在镜头上，任何场景都可以用 ----------
-export function makeLyricLayer(ctx, camera, scene, { heroColor = 0xffd6ef, outline = PAL.cyan, dist = 6, heroY = -0.34, heroH = 0.66, stripY = -0.78, stripN = 14, hold = false } = {}) {
+export function makeLyricLayer(ctx, camera, scene, { heroColor = 0xffd6ef, outline = PAL.cyan, dist = 6, heroY = -0.34, heroH = 0.66, stripY = -0.78, stripN = 14, hold = false, disperseAt = 0 } = {}) {
   if (camera.parent !== scene) scene.add(camera);
   const root = new THREE.Group(); camera.add(root);
   const hero = makeGlyphBank(ctx.atlasF, heroColor, 1, 0.8);
@@ -153,24 +153,28 @@ export function makeLyricLayer(ctx, camera, scene, { heroColor = 0xffd6ef, outli
   for (let i = 0; i < stripN; i++) { const m = glyphMesh(ctx.atlasF, KANA[0], 0xffffff, 1, 0); m.visible = false; root.add(m); strip.push(m); }
   const gF = {};
   const geoF = (ch) => gF[ch] || (gF[ch] = glyphGeo(ctx.atlasF, ch, 1, 1));
-  let lastCh = null;   // hold 模式：记住最后一个假名，直到下一个假名出现前一直保留
+  let lastCh = null, holdT0 = 0;   // hold 模式：记住最后一个假名，直到下一个假名出现前一直保留
   function update(k, t, f) {
     const halfH = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * dist;
     root.position.set(0, 0, -dist);
     const has = !!k && k.i >= 0;
     let ch = has ? k.flat[k.i] : null;
-    if (hold) { if (ch && ch in hero.map) lastCh = ch; else if (lastCh) ch = lastCh; }
-    const show = !!ch && ch in hero.map;
+    if (hold) { if (ch && ch in hero.map) { if (ch !== lastCh) holdT0 = t; lastCh = ch; } else if (lastCh) ch = lastCh; }
     const held = hold && !(has && k.flat[k.i] === ch);   // 当前显示的是保持下来的旧假名
+    // 保持的假名：振幅从出现时起逐渐变大（到 disperseAt 时达到最大），到 disperseAt 扩散消失
+    const grow = !hold ? 0 : disperseAt > holdT0 ? clamp((t - holdT0) / (disperseAt - holdT0)) : clamp((t - holdT0) / 6);
+    const dq = (hold && disperseAt && held) ? clamp((t - disperseAt) / 0.8) : 0, dis = dq * dq * (3 - 2 * dq);
+    const show = !!ch && ch in hero.map && dis < 1;
     hero.group.visible = heroO.group.visible = show;
     if (show) {
       const pp = held ? 0 : Math.exp(-(k.age ?? 0) * 7);
       const beat = f.kick * 0.6 + f.hit * 0.4;
-      const jx = hold ? Math.sin(t * 53.0) * halfH * 0.012 * (0.4 + beat * 3) : 0;
-      const jy = hold ? Math.cos(t * 47.0) * halfH * 0.008 * (0.4 + beat * 3) : 0;
-      const sc = halfH * heroH * (1 + pp * 0.22 + f.kick * 0.05 + (hold ? beat * 0.06 : 0));
-      const a = hero.show(ch, 0.55); a.position.set(jx, halfH * heroY + jy, 0); a.scale.setScalar(sc);
-      const b = heroO.show(ch, 0.45); b.position.set(halfH * 0.01 + jx, halfH * heroY - halfH * 0.01 + jy, -0.02); b.scale.setScalar(sc * 1.04);
+      const amp = (0.4 + beat * 3) * (1 + grow * 6) * (1 + dis * 4);   // 振幅随保持时间增大
+      const jx = hold ? Math.sin(t * 53.0) * halfH * 0.012 * amp + (hash(Math.floor(t * 30)) - 0.5) * halfH * 1.2 * dis : 0;
+      const jy = hold ? Math.cos(t * 47.0) * halfH * 0.008 * amp + (hash(Math.floor(t * 30) + 5) - 0.5) * halfH * 1.0 * dis : 0;
+      const sc = halfH * heroH * (1 + pp * 0.22 + f.kick * 0.05 + (hold ? beat * 0.06 : 0)) * (1 + dis * 2.5);
+      const a = hero.show(ch, 0.55 * (1 - dis)); a.position.set(jx, halfH * heroY + jy, 0); a.scale.setScalar(sc);
+      const b = heroO.show(ch, 0.45 * (1 - dis)); b.position.set(halfH * 0.01 + jx, halfH * heroY - halfH * 0.01 + jy, -0.02); b.scale.setScalar(sc * 1.04);
       if (hold && Math.sin(t * 41.0) > 0.9 - beat * 0.5) hero.group.visible = heroO.group.visible = false;   // 随节拍闪烁
     }
     let acc = 0, row = null, within = -1;

@@ -1,3 +1,4 @@
+
 // 场景 outro（157–200 秒）：数据雨越下越密，歌词假名在镜头前逐个点亮，电路网格在脚下延伸，数据线像柱子一样升起。
 // 之后的 200–226 秒由 soul / flash / soulvoid 三个场景接手（魂字与锁链都在那里）。
 import * as THREE from 'three';
@@ -5,7 +6,8 @@ import { PAL, col, KANA, JP_FONT, makeGrid, makeStars, hash, smooth, lerp } from
 import { makeChain } from '../lib.js';
 import { makeLyricLayer, makeCyberField } from '../cyber.js';
 
-const RW = 1280, RH = 720, CW = 18, CH = 20, NC = Math.floor(RW / CW), TAIL = 16;
+// 数据雨：列更窄、每列两条雨流、尾巴更长，画面比之前密集得多
+const RW = 1280, RH = 720, CW = 14, CH = 16, NC = Math.floor(RW / CW), TAIL = 20, STREAMS = 2;
 
 export function create(ctx) {
   const scene = new THREE.Scene(); scene.background = col(0x03000a);
@@ -17,17 +19,21 @@ export function create(ctx) {
   const rain = new THREE.Mesh(new THREE.PlaneGeometry(89.5, 50.4), new THREE.MeshBasicMaterial({ map: rtex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
   rain.position.z = -40; scene.add(rain);
   function drawRain(t, inten) {
-    rg.clearRect(0, 0, RW, RH); rg.font = `700 ${CH - 3}px ${JP_FONT}`; rg.textAlign = 'center'; rg.textBaseline = 'middle';
+    rg.clearRect(0, 0, RW, RH); rg.font = `700 ${CH - 2}px ${JP_FONT}`; rg.textAlign = 'center'; rg.textBaseline = 'middle';
+    const P = RH + TAIL * CH;   // 一条雨流走完一圈的周期
     for (let c = 0; c < NC; c++) {
-      if (hash(c * 1.7) > inten) continue;
-      const sp = 0.45 + hash(c * 3.1) * 0.9, head = ((t * sp * 11 + hash(c * 5.3) * (RH + TAIL * CH))) % (RH + TAIL * CH);
-      const warm = hash(c * 9.7) > 0.5;
-      for (let r = 0; r < TAIL; r++) {
-        const y = head - r * CH; if (y < -CH || y > RH + CH) continue;
-        const a = Math.pow(1 - r / TAIL, 1.6) * (r === 0 ? 1 : 0.8);
-        const ch = KANA[Math.floor(hash(c * 13.1 + r * 7.7 + Math.floor(t * 5 + c % 5) * 1.3) * KANA.length)];
-        rg.fillStyle = r === 0 ? `rgba(255,255,255,${a})` : warm ? `rgba(255,70,160,${a * 0.9})` : `rgba(70,240,255,${a * 0.9})`;
-        rg.fillText(ch, c * CW + CW / 2, y);
+      for (let s = 0; s < STREAMS; s++) {
+        const id = c + s * 0.37;   // 同一列的两条雨流用不同的随机种子
+        if (hash(id * 1.7 + 0.5) > inten) continue;
+        const sp = 0.45 + hash(id * 3.1) * 0.9, head = ((t * sp * 11 + hash(id * 5.3) * P)) % P;
+        const warm = hash(id * 9.7) > 0.5;
+        for (let r = 0; r < TAIL; r++) {
+          const y = head - r * CH; if (y < -CH || y > RH + CH) continue;
+          const a = Math.pow(1 - r / TAIL, 1.6) * (r === 0 ? 1 : 0.8);
+          const ch = KANA[Math.floor(hash(id * 13.1 + r * 7.7 + Math.floor(t * 5 + c % 5) * 1.3) * KANA.length)];
+          rg.fillStyle = r === 0 ? `rgba(255,255,255,${a})` : warm ? `rgba(255,70,160,${a * 0.9})` : `rgba(70,240,255,${a * 0.9})`;
+          rg.fillText(ch, c * CW + CW / 2, y);
+        }
       }
     }
     rtex.needsUpdate = true;
@@ -44,7 +50,7 @@ export function create(ctx) {
 
   function update({ t, f, S, k, post }) {
     const lt = S.lt;
-    drawRain(t, lerp(0.25, 1.0, smooth(0, 28, lt)));
+    drawRain(t, lerp(0.35, 1.0, smooth(0, 28, lt)));
     rain.material.opacity = 0.6 + f.kick * 0.2;
     strands.layout((u) => {
       const a = u * Math.PI * 6 + t * 0.4;

@@ -18,7 +18,8 @@ export function create(ctx) {
   scene.add(makeStars(2200, 380, 1.5, 4));
 
   // 太阳放大约 3 倍（后退到 z=-232 以保证不超出画面），光晕同步放大
-  const sun = makeSun(38, 0.6); sun.scale.setScalar(3); sun.position.set(0, 10, -232); scene.add(sun);
+  // 断裂条纹的范围加大到太阳下部 74%，并把太阳抬高，让条纹露在地平线和山脊之上
+  const sun = makeSun(38, 0.6, 0.74); sun.scale.setScalar(3); sun.position.set(0, 10, -232); scene.add(sun);
   const sunGlow = glowSprite('255,120,90', 300, 0.75); sunGlow.scale.setScalar(2.2); sunGlow.position.set(0, 8, -234); scene.add(sunGlow);
   const hz = glowSprite('255,60,140', 500, 0.55); hz.scale.set(1.2, 0.22, 1); hz.position.set(0, 4, -200); scene.add(hz);
 
@@ -56,7 +57,7 @@ export function create(ctx) {
     sky.material.uniforms.uTop.value.set(M.top); sky.material.uniforms.uMid.value.set(M.mid); sky.material.uniforms.uHor.value.set(M.hor);
     scene.fog.color.set(M.hor);
     const rise = lerp(M.rise[0], M.rise[1], S.p);
-    sun.position.y = lerp(-8, 24, rise); sunGlow.position.y = sun.position.y; sun.material.uniforms.uTime.value = t; sun.material.uniforms.uPulse.value = f.kick;
+    sun.position.y = lerp(10, 22, rise); sunGlow.position.y = sun.position.y; sun.material.uniforms.uTime.value = t; sun.material.uniforms.uPulse.value = f.kick;
     sunGlow.material.opacity = 0.12 + rise * 0.12 + f.kick * 0.05;
     grid.material.uniforms.uTime.value = t; grid.material.uniforms.uSpeed.value = M.speed; grid.material.uniforms.uCam.value.copy(camera.position); grid.material.uniforms.uPulse.value = f.kick;
     // 拱门向镜头飞来

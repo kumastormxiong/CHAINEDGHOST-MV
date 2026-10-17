@@ -145,7 +145,7 @@ export function makeGrid({ size = 600, speed = 14, scale = 3, colA = PAL.magenta
 }
 
 // ---- 蒸汽波落日（带百叶缝）
-export function makeSun(r = 20, gain = 0.95) {
+export function makeSun(r = 20, gain = 0.95, cut = 0.58) {
   const mat = new THREE.ShaderMaterial({
     transparent: true, depthWrite: false,
     uniforms: { uTime: { value: 0 }, uPulse: { value: 0 }, uGain: { value: gain } },
@@ -154,7 +154,7 @@ export function makeSun(r = 20, gain = 0.95) {
     void main(){ vec2 p=vUv*2.-1.; float d=length(p); if(d>1.0)discard;
       float y=vUv.y;
       vec3 c=mix(vec3(1.0,0.10,0.52),vec3(1.0,0.50,0.14),smoothstep(0.12,0.55,y)); c=mix(c,vec3(1.0,0.92,0.32),smoothstep(0.55,0.95,y));
-      if(y<0.58){ float f=y*13.0-uTime*0.35; float k=fract(f); float w=mix(0.0,0.62,smoothstep(0.58,0.02,y)); if(k<w) discard; }
+      if(y<${cut}){ float f=y*13.0-uTime*0.35; float k=fract(f); float w=mix(0.0,0.62,smoothstep(${cut},0.02,y)); if(k<w) discard; }
       float edge=smoothstep(1.0,0.965,d);
       gl_FragColor=vec4(c*(uGain+uPulse*0.3),edge);}`
   });
