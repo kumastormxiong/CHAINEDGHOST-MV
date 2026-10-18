@@ -145,6 +145,7 @@ export_MV.bat         双击导出 MP4
 - [three.js](https://threejs.org/) 0.186（MIT）：通过 import map 从 `web/node_modules` 加载
 - [Playwright](https://playwright.dev/)：逐帧渲染与截图
 - [ffmpeg](https://ffmpeg.org/)：视频与音频编码
+- [huashu-art-motion](https://github.com/alchaincyf/huashu-art-motion)（作者：花叔）：项目初期使用的 MV 制作 skill，感谢作者的分享
 - 字体：Michroma、Exo 2、Righteous、Press Start 2P、Dela Gothic One、Noto Sans SC，来自 [Google Fonts](https://fonts.google.com/)，作者理解其授权为 SIL Open Font License。
 
 > **字体授权提示**：作者未能逐一核实所有字体的商用条款。`web/assets/fonts/SciKanji-HYZhongHei.ttf` 的授权尚未确认。如需商用或再分发，请先自行核实字体授权，或替换为可商用的字体。
