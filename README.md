@@ -115,7 +115,7 @@ export_MV.bat       # 或：python tools/export_mp4.py
 - **时间驱动**：`web/src/timeline.js` 根据 `web/data/timing.json` 判断当前段落、段内进度 `lt` 以及鼓点、命中等信号。
 - **场景**：`web/src/worlds/` 下每个段落一个 three.js 场景，由 `web/src/worlds/index.js` 统一调度。
 - **音频特征**：`web/data/features.json`、`web/data/spectrum.json`，由 `tools/analyze_audio.py`、`tools/analyze_spectrum.py` 从音频分析得到，画面里的节拍与强度都来自这里。
-- **歌词与时间表**：`tools/build_lyrics.py` 由歌词卡生成 `web/data/lyrics.json`；`tools/build_timing.py` 由 `timing/lyrics_timed.lrc` 生成段落时间表 `web/data/timing.json`；逐字时间 `web/data/char_times.json` 由打点工具保存（同时备份到 `timing/char_times.json`）。
+- **歌词与时间表**：`tools/build_lyrics.py` 由本地歌词卡（`timing/original_lyrics_card.txt`，未上传）生成 `web/data/lyrics.json`；`tools/build_timing.py` 由 `timing/lyrics_timed.lrc` 生成段落时间表 `web/data/timing.json`；逐字时间 `web/data/char_times.json` 由打点工具保存（同时备份到 `timing/char_times.json`）。
 - **后期效果**：`web/src/post.js` 处理泛光、色差、扫描线、故障等效果。
 - **确定性导出**：导出时每帧调用页面的 `window.__shot(t)`，`t = 帧号 / 60`，不依赖实时播放，因此结果可以逐帧复现。
 
@@ -145,7 +145,9 @@ export_MV.bat         双击导出 MP4
 - [three.js](https://threejs.org/) 0.186（MIT）：通过 import map 从 `web/node_modules` 加载
 - [Playwright](https://playwright.dev/)：逐帧渲染与截图
 - [ffmpeg](https://ffmpeg.org/)：视频与音频编码
-- 字体（SIL Open Font License）：Michroma、Exo 2、Righteous、Press Start 2P、Dela Gothic One、Noto Sans SC，来自 [Google Fonts](https://fonts.google.com/)
+- 字体：Michroma、Exo 2、Righteous、Press Start 2P、Dela Gothic One、Noto Sans SC，来自 [Google Fonts](https://fonts.google.com/)，作者理解其授权为 SIL Open Font License。
+
+> **字体授权提示**：作者未能逐一核实所有字体的商用条款。`web/assets/fonts/SciKanji-HYZhongHei.ttf` 的授权尚未确认。如需商用或再分发，请先自行核实字体授权，或替换为可商用的字体。
 
 ---
 

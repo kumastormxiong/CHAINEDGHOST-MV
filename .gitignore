@@ -23,5 +23,7 @@ __pycache__/
 *.pyc
 *.log
 *.err
+# 原始歌词卡：含第三方平台的账号与链接信息，仅本地保留
+timing/original_lyrics_card.txt
 # 本地一次性补丁脚本
 tools/_patch_*.py
