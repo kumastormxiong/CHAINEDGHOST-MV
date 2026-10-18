@@ -1,9 +1,10 @@
-# 不上传：音乐文件、渲染测试图片、视频输出
-web/audio/
+# 不上传：渲染测试图片、视频输出
 render/
 output/
 storyboard/
 *.wav
+# 例外：歌曲母带随仓库公开（版权保留，使用前请联系作者获得授权，见 README）
+!web/audio/GhostChain.wav
 *.mp3
 *.flac
 *.ogg
