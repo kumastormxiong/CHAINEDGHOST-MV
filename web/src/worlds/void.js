@@ -42,7 +42,7 @@ const makeRingDust = (c1, c2, a, spread, speed, n, seed) => {
   g.setAttribute('aAng', new THREE.BufferAttribute(ang, 1));
   g.setAttribute('aSeed', new THREE.BufferAttribute(sd, 1));
   const m = new THREE.Points(g, ringDustMat(c1, c2, a, spread, speed));
-  m.frustumCulled = false; m.renderOrder = 20;
+  m.frustumCulled = false; m.renderOrder = -2;   // 先于剪影绘制，让剪影的半透明体挡住光圈
   return m;
 };
 
@@ -60,8 +60,8 @@ export function create(ctx) {
   const ghost = makeGhost(ctx.ghostTex, 9); ghost.position.set(0, 4.9, 0); scene.add(ghost);
 
   const ring = new THREE.Mesh(new THREE.TorusGeometry(6.6, 0.085, 12, 200), new THREE.MeshBasicMaterial({ color: PAL.magenta, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, toneMapped: false }));
-  ring.position.set(0, 5.0, -2.5); scene.add(ring);
-  const ring2 = ring.clone(); ring2.scale.setScalar(1.18); ring2.material = ring.material.clone(); ring2.material.color.set(PAL.cyan); ring2.material.opacity = 0.45; scene.add(ring2);
+  ring.position.set(0, 5.0, -2.5); ring.renderOrder = -1; scene.add(ring);
+  const ring2 = ring.clone(); ring2.scale.setScalar(1.18); ring2.material = ring.material.clone(); ring2.material.color.set(PAL.cyan); ring2.material.opacity = 0.45; ring2.renderOrder = -1; scene.add(ring2);
   // 光圈拖影：连续渐变的散开粒子，跟随光圈的位置、朝向与缩放，层叠在剪影之上
   const trails = [
     { m: makeRingDust(PAL.magenta, PAL.cyan, 0.9, 5.0, 0.2, 1600, 7), src: ring },
@@ -106,13 +106,13 @@ export function create(ctx) {
       m.material.uniforms.uT.value = t; m.material.uniforms.uK.value = f.kick;
     });
     // 锁链螺旋：随时间长出来
-    const grow = smooth(1.5, 12, lt);
-    chain.layout((x) => { const a = x * Math.PI * 2 * 3.2 + t * 0.55, r = 3.9 + 0.5 * Math.sin(x * 7 + t * 0.9) + f.kick * 0.15; return new THREE.Vector3(Math.cos(a) * r, 0.0 + x * 11.0, Math.sin(a) * r * 0.75 - 0.5); }, { frac: 0.12 + 0.88 * grow, scale: 0.62 });
+    const grow = smooth(2.0, 12.0, lt); chain.mesh.visible = lt >= 2.0;   // 锁链从 2.0 秒开始出现
+    chain.layout((x) => { const a = x * Math.PI * 2 * 3.2 + t * 0.55, r = 3.9 + 0.5 * Math.sin(x * 7 + t * 0.9) + f.kick * 0.15; return new THREE.Vector3(Math.cos(a) * r, 0.0 + x * 11.0, Math.sin(a) * r * 0.75 - 0.5); }, { frac: grow, scale: 0.62 });
     chain.mesh.position.set(0, 0, 0);
     // 标题
     const ta = smooth(3.5, 5.0, lt) * (1 - smooth(17, 19.5, lt)); const fl = (Math.sin(t * 40) > 0.4 && lt < 6.5) ? 0.55 : 1;
     nameT.material.opacity = smooth(5.5, 8.5, lt) * (1 - smooth(14.5, 17.5, lt)); nameT.visible = nameT.material.opacity > 0.01;
-    title.material.opacity = ta * fl; titleG.material.opacity = ta * 0.28; title.position.x += (lt < 5.2 ? (Math.sin(t * 90) * 0.12 * (1 - smooth(3.5, 5.2, lt))) : 0); titleG.position.x += 0.04;
+    title.material.opacity = ta * fl; titleG.material.opacity = ta * 0.12; title.position.x += (lt < 5.2 ? (Math.sin(t * 90) * 0.12 * (1 - smooth(3.5, 5.2, lt))) : 0); titleG.position.x += 0.04;
     const dpos = dust.geometry.attributes.position; for (let i = 0; i < dn; i++) { dpos.array[i * 3 + 1] = (dp[i * 3 + 1] + t * dsp[i] * 0.6) % 16; } dpos.needsUpdate = true;
     const s = post.s; s.bloom = 0.95 + f.kick * 0.3; s.bloomR = 0.7; s.glitch = Math.max(s.glitch, f.hit * 0.15); s.track = 0.6; s.scan = 0.13; s.ab = 0.0022 + f.hit * 0.002;
   }

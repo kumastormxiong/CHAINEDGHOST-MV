@@ -1,6 +1,6 @@
 // 场景 tunnel：Chorus 2。数据隧道：由数据包环和假名环组成，向镜头飞来（已放慢），尽头是白热的门；歌词悬在镜头前。
 import * as THREE from 'three';
-import { PAL, col, glyphMesh, glyphGeo, glowSprite, makeStars, smooth, clamp, rng } from '../lib.js';
+import { PAL, col, glyphMesh, glyphGeo, glowSprite, makeStars, smooth, clamp, rng, hash } from '../lib.js';
 import { makeChain } from '../lib.js';
 import { makeLyricLayer } from '../cyber.js';
 
@@ -45,6 +45,25 @@ export function create(ctx) {
   const portal2 = glowSprite('255,70,150', 220, 0.8); portal2.position.set(0, 0, -208); scene.add(portal2);
   scene.add(makeStars(600, 220, 1.2, 3).translateZ(-100));
   const lyr = makeLyricLayer(ctx, camera, scene, { heroColor: 0xffd6ef, outline: PAL.cyan, heroY: -0.3, hold: true, disperseAt: 125 });
+  // “ケ”（chorus2 末尾，118.3 秒起被保持）：122 秒起大幅震动、放大，1.4 秒内淡出消失；段内之后不再显示假名大字
+  const KT = 122.0;
+  const keFill = glyphMesh(ctx.atlasF, 'ケ', 0xff8fd0, 1, 0.55), keLine = glyphMesh(ctx.atlasO, 'ケ', PAL.cyan, 1, 0.5);
+  keFill.visible = keLine.visible = false;
+  const keRoot = new THREE.Group(); if (camera.parent !== scene) scene.add(camera); camera.add(keRoot); keRoot.position.set(0, 0, -6); keRoot.add(keFill, keLine);
+  function keEffect(t, f, S) {
+    const on = S.sec.id === 'chorus2' && t >= KT && t < KT + 1.4;
+    keFill.visible = keLine.visible = on;
+    if (!on) return;
+    const halfH = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * 6;
+    const p = clamp((t - KT) / 1.4), amp = 0.4 + 2.6 * smooth(0, 0.5, t - KT);   // 震动幅度迅速变大
+    const jx = (hash(Math.floor(t * 40)) - 0.5) * halfH * 0.18 * amp + Math.sin(t * 73) * halfH * 0.05 * amp;
+    const jy = (hash(Math.floor(t * 40) + 9) - 0.5) * halfH * 0.14 * amp + Math.cos(t * 61) * halfH * 0.04 * amp;
+    const sc = halfH * 0.66 * 1.04 * (1 + 1.1 * p * p) * (1 + f.kick * 0.08);
+    const a = 1 - smooth(0.4, 1.4, t - KT);
+    keFill.position.set(jx, halfH * -0.3 + jy, 0.01); keLine.position.set(jx + halfH * 0.01, halfH * -0.3 + jy - halfH * 0.01, 0);
+    keFill.scale.setScalar(sc); keLine.scale.setScalar(sc * 1.04);
+    keFill.material.opacity = 0.6 * a; keLine.material.opacity = 0.5 * a;
+  }
 
   const geoC = {}; const getG = (ch) => geoC[ch] || (geoC[ch] = glyphGeo(ctx.atlasF, ch, 2.1, 2.1));
   const SPEED = 24;   // 原来是 42，放慢到约一半
@@ -59,12 +78,15 @@ export function create(ctx) {
       const near = clamp(1 - Math.abs(z + 12) / 40);
       r.ring.material.opacity = 0.35 + 0.55 * f.kick * near + 0.2;
       r.glyphs.forEach((m, j) => {
-        const ch = flat[Math.abs((lap * NR + r.i) * 14 + j) % flat.length]; if (ch in ctx.atlasF.idx) m.geometry = getG(ch);
+        const ch = flat[Math.abs((lap * NR + r.i) * 14 + j) % flat.length];
+        m.visible = !(S.sec.id === 'chorus2' && t >= KT && ch === 'ケ');   // ケ 出现后，本段内环上的字也不再出现ケ
+        if (ch in ctx.atlasF.idx) m.geometry = getG(ch);
       });
     });
     lines.material.uniforms.uT.value = t; lines.material.uniforms.uSpeed.value = SPEED * 1.8; lines.material.uniforms.uLen.value = 5 + f.low * 8;
     portal.material.opacity = 0.8 + f.kick * 0.2; portal.scale.setScalar(1 + f.kick * 0.1 + Math.sin(t * 3) * 0.03);
-    lyr.update(k, t, f);
+    lyr.update(k, t, f, { hideHero: S.sec.id === 'chorus2' && t >= KT });   // ケ 出现后，本段内不再显示假名大字
+    keEffect(t, f, S);
     if (sec && sec.mode === 'apex') {
       // 副歌 3：镜头在锁链之间左右晃动、向前穿行
       camera.position.set(Math.sin(t * 0.9) * 3.0, Math.cos(t * 0.7) * 2.2, 4 + Math.sin(t * 0.5) * 2);

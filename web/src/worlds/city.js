@@ -82,7 +82,7 @@ export function create(ctx) {
   const cf = makeCyberField({ n: 26, codes: 8, box: [40, 30, 200], seed: 21 }); scene.add(cf.group);
   const bf = makeBlockField({ n: 150, box: [46, 30, 200], seed: 61 }); scene.add(bf.mesh);
   const eyesF = ctx.makeEyeField([
-    { pos: [-26, 52, -125], w: 34, iris: 'blue', line: 'pink' }, { pos: [24, 58, -140], w: 40, iris: 'red', line: 'cyan' }, { pos: [-2, 78, -170], w: 50, iris: 'ring_cyan', line: 'pink' },
+    { pos: [-26, 52, -125], w: 34, iris: 'blue', line: 'pink' }, { pos: [24, 58, -140], w: 40, iris: 'red', line: 'cyan' }, { pos: [-2, 92, -170], w: 50, iris: 'ring_cyan', line: 'pink' },
     { pos: [-40, 40, -110], w: 20, iris: 'orange', line: 'cyan' }, { pos: [42, 44, -115], w: 22, iris: 'ring_pink', line: 'pink' }, { pos: [0, 40, -100], w: 16, iris: 'blue', line: 'cyan' }
   ]); scene.add(eyesF.group);
 
@@ -104,12 +104,15 @@ export function create(ctx) {
     road.material.uniforms.uTime.value = t; road.material.uniforms.uSpeed.value = speed; road.material.uniforms.uCam.value.copy(camera.position); road.material.uniforms.uPulse.value = f.kick;
     rain.material.uniforms.uTime.value = t;
     moon.material.uniforms.uTime.value = t; moon.material.uniforms.uPulse.value = f.kick; moonGlow.material.opacity = 0.22 + f.kick * 0.08;
-    camera.position.set(Math.sin(t * 0.37) * 2.2, 5.2 + Math.sin(t * 0.6) * 0.5 + f.kick * 0.12, 6);
-    camera.lookAt(Math.sin(t * 0.23) * 4, 9 + Math.sin(t * 0.3) * 1.2, -60); camera.rotation.z += Math.sin(t * 0.5) * 0.06;
+    const fx = sec.id === 'pre2' ? 1 : 0;   // Pre-Chorus 2：自由飞行镜头，幅度更大
+    const hi = fx * Math.pow(Math.max(0, Math.sin(t * 0.5 + 5.09)), 2);   // Pre-Chorus 2：周期性拉升到高空镜头
+    camera.position.set(Math.sin(t * 0.37) * (2.2 + fx * 6.8) + fx * Math.sin(t * 0.13) * 5, fx ? 9 + Math.sin(t * 0.6) * 2.5 + Math.sin(t * 0.27) * 2 + hi * 16 + f.kick * 0.12 : 5.2 + Math.sin(t * 0.6) * 0.5 + f.kick * 0.12, 6 + fx * Math.sin(t * 0.33) * 6);
+    camera.lookAt(Math.sin(t * 0.23) * 4 + fx * (Math.sin(t * 0.41) * 14 + Math.sin(t * 0.17) * 6), 9 + Math.sin(t * 0.3) * 1.2 + fx * Math.sin(t * 0.36) * 4, -60); camera.rotation.z += Math.sin(t * 0.5) * (0.06 + fx * 0.12);
     camera.fov = 66 + f.kick * 2.5 + (pre ? S.p * 8 : 0); camera.updateProjectionMatrix();
     lyr.update(k, t, f); cf.update(t, f); bf.update(t, f);
 
-    eyesF.update(t, camera, { opacity: 0.9, appear: pre ? smooth(0, 5, S.lt) : 0.5 * smooth(3, 9, S.lt), kick: f.kick });
+    const noEyes = sec.id === 'verse2' || sec.id === 'pre2';   // 主歌2、预副歌2 暂不出现眼睛
+    eyesF.update(t, camera, { opacity: noEyes ? 0 : 0.9, appear: pre ? smooth(0, 5, S.lt) : 0.5 * smooth(3, 9, S.lt), kick: f.kick });
     const s = post.s; s.bloom = 0.4 + f.kick * 0.12; s.glitch = Math.max(s.glitch, f.hit * (pre ? 0.3 : 0.18)); s.track = 0.45; s.scan = 0.14; s.ab = 0.003 + f.hit * 0.002; s.warp = 0.06;
   }
   return { scene, camera, update };

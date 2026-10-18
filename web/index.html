@@ -17,6 +17,7 @@
   #ui button:hover{background:#2a0b4a}
   #ui input[type=range]{flex:1;min-width:240px;accent-color:#ff2f8f}
   #info{opacity:.75;font-variant-numeric:tabular-nums}
+  #ui select{background:#150826;color:#8ff;border:1px solid #3ff6ff88;border-radius:3px;padding:3px 6px}
   #secs{display:flex;gap:6px;flex-wrap:wrap;width:100%}
 </style>
 </head>
@@ -29,6 +30,7 @@
   <span id="info">0:00</span>
   <button id="bRec" title="按 R 键也可以">● 录制成 mp4/webm</button>
   <button id="bHud">HUD</button>
+  <label>画质 <select id="quality" title="低画质优先保证帧率；录制请用高"><option value="high">高</option><option value="medium">中</option><option value="low">低</option></select></label>
   <button id="bTap" title="播放时按空格标记段落起点">打点模式</button>
   <div id="secs"></div>
 </div>

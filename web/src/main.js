@@ -2,9 +2,10 @@ import * as THREE from 'three';
 import { loadFonts, makeAtlas, KANA, makeEnv } from './lib.js';
 import { Features } from './features.js';
 import { Timeline } from './timeline.js';
-import { createPost } from './post.js';
+import { createPost, QUALITY } from './post.js';
 import { createWorlds } from './worlds/index.js';
 import { loadEyeTextures, makeEyeField } from './eyes.js';
+import { Spectrum } from './spectrum.js';
 
 const q = new URLSearchParams(location.search);
 const W = +q.get('w') || 1920, H = +q.get('h') || 1080;
@@ -20,16 +21,18 @@ $('stage').appendChild(renderer.domElement);
 
 await loadFonts();
 const [feat, tl] = await Promise.all([Features.load('./data/features.json'), Timeline.load()]);
+const spec = await Spectrum.load('./data/spectrum.json');
 const loader = new THREE.TextureLoader();
 const ld = (u) => new Promise((res) => loader.load(u, (t) => { t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; res(t); }));
 const [ghostTex, avatarTex, girlTex, eyeT] = await Promise.all([ld('assets/avatar_ghost.png'), ld('assets/avatar_full.png'), ld('assets/girl_ghost.png'), loadEyeTextures()]);
 const ctx = {
-  renderer, W, H, THREE, ghostTex, avatarTex, girlTex, eyeT, tl, feat,
+  renderer, W, H, THREE, ghostTex, avatarTex, girlTex, eyeT, tl, feat, spec,
   makeEyeField: (specs) => makeEyeField(eyeT, specs),
   env: makeEnv(renderer),
   atlasF: makeAtlas(KANA, 'filled'), atlasO: makeAtlas(KANA, 'outline')
 };
-const post = createPost(renderer, W, H);
+const savedQ = (() => { try { return localStorage.getItem('ghostchain_quality'); } catch (e) { return null; } })();
+const post = createPost(renderer, W, H, STILL ? 'high' : (QUALITY[savedQ] ? savedQ : 'high'));   // 单帧出片永远用高画质
 const worlds = createWorlds(ctx);
 
 function frame(t) {
@@ -76,6 +79,8 @@ function initPlayer() {
   const toggle = () => { audio.paused ? audio.play() : audio.pause(); };
   $('start').onclick = () => { $('start').remove(); audio.play(); ui.classList.remove('hide'); };
   $('bPlay').onclick = toggle; $('bHud').onclick = () => { hud = !hud; ui.classList.add('hide'); };
+  const qSel = $('quality'); qSel.value = post.quality;
+  qSel.onchange = () => { post.setQuality(qSel.value); try { localStorage.setItem('ghostchain_quality', qSel.value); } catch (e) {} };
   seek.oninput = () => { audio.currentTime = +seek.value; };
   addEventListener('mousemove', () => { idle = 0; ui.classList.remove('hide'); });
   $('bTap').onclick = () => { tapMode = !tapMode; taps = []; $('bTap').textContent = tapMode ? '打点中：播放时按 Enter 标记下一段起点' : '打点模式'; };

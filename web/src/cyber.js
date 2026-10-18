@@ -154,7 +154,7 @@ export function makeLyricLayer(ctx, camera, scene, { heroColor = 0xffd6ef, outli
   const gF = {};
   const geoF = (ch) => gF[ch] || (gF[ch] = glyphGeo(ctx.atlasF, ch, 1, 1));
   let lastCh = null, holdT0 = 0;   // hold 模式：记住最后一个假名，直到下一个假名出现前一直保留
-  function update(k, t, f) {
+  function update(k, t, f, { hideHero = false } = {}) {   // hideHero：本段内不显示假名大字（字条仍显示）
     const halfH = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * dist;
     root.position.set(0, 0, -dist);
     const has = !!k && k.i >= 0;
@@ -164,7 +164,7 @@ export function makeLyricLayer(ctx, camera, scene, { heroColor = 0xffd6ef, outli
     // 保持的假名：振幅从出现时起逐渐变大（到 disperseAt 时达到最大），到 disperseAt 扩散消失
     const grow = !hold ? 0 : disperseAt > holdT0 ? clamp((t - holdT0) / (disperseAt - holdT0)) : clamp((t - holdT0) / 6);
     const dq = (hold && disperseAt && held) ? clamp((t - disperseAt) / 0.8) : 0, dis = dq * dq * (3 - 2 * dq);
-    const show = !!ch && ch in hero.map && dis < 1;
+    const show = !hideHero && !!ch && ch in hero.map && dis < 1;
     hero.group.visible = heroO.group.visible = show;
     if (show) {
       const pp = held ? 0 : Math.exp(-(k.age ?? 0) * 7);

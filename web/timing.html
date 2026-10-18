@@ -11,6 +11,7 @@ button:hover{background:#2a0b4a}
 button.hot{background:#ff2f8f;color:#fff;border-color:#ff2f8f}
 #cur{font:900 46px/1.1 "Yu Gothic","Meiryo",sans-serif;color:#ffd6ef;min-height:52px;margin-top:6px}
 #cur small{font:13px system-ui;color:#9ab;margin-left:10px}
+#now{font:700 16px/1.4 system-ui,sans-serif;color:#3ff6ff;min-height:22px}
 #bar{height:6px;background:#2a0b4a;border-radius:3px;margin:8px 0;overflow:hidden}
 #bar i{display:block;height:100%;background:#3ff6ff;width:0}
 #help{color:#9ab;font-size:12px;margin-top:4px}
@@ -23,6 +24,10 @@ h3{color:#7ff9ff;margin:20px 0 6px;font-size:15px;border-bottom:1px dashed #3ff6
 .ch.done small{color:#ffb0dc}
 .ch.cur{background:#ff2f8f;color:#fff;border-color:#fff}
 .ch.cur small{color:#fff}
+.ch.play{background:#3ff6ff;color:#07020f;border-color:#fff;box-shadow:0 0 12px #3ff6ffcc}
+.ch.play small{color:#07020f}
+.ch.cur.play{background:#ff2f8f;color:#fff;box-shadow:0 0 0 3px #3ff6ff}
+.ch.cur.play small{color:#fff}
 #status{margin-left:8px;color:#9ab}
 </style></head>
 <body>
@@ -31,6 +36,7 @@ h3{color:#7ff9ff;margin:20px 0 6px;font-size:15px;border-bottom:1px dashed #3ff6
   <button id="play">播放 / 暂停 · 空格</button>
   速度 <input id="rate" type="range" min="30" max="100" step="5" value="50" style="vertical-align:middle;width:180px"> <b id="rateV">50%</b>
   &nbsp; <span id="pos">0.00s</span> / <span id="dur">--</span>
+  &nbsp; <label><input id="follow" type="checkbox" checked style="vertical-align:middle"> 播放时跟随高亮</label>
   <br>
   <button id="tap" class="hot">打点 · Enter</button>
   <button id="undo">撤销 · Backspace</button>
@@ -39,8 +45,9 @@ h3{color:#7ff9ff;margin:20px 0 6px;font-size:15px;border-bottom:1px dashed #3ff6
   <button id="export">导出 JSON</button>
   <span id="status"></span>
   <div id="cur"></div>
+  <div id="now"></div>
   <div id="bar"><i></i></div>
-  <div id="help">Enter 给当前字打点并跳到下一字 · ↑↓ 移动光标（不打点） · ←→ 前后 2 秒（按 Shift 为 0.3 秒） · [ ] 速度 ±5% · 点字可直接定位 · 每次打点约 1 秒后自动保存</div>
+  <div id="help">Enter 给当前字打点并跳到下一字 · ↑↓ 移动光标（不打点） · ←→ 前后 2 秒（按 Shift 为 0.3 秒） · [ ] 速度 ±5% · 点字可直接定位 · 青色 = 正在播放的字，粉色 = 光标（下一个要打点的字） · 长按 Enter 不会连续打点 · 每次打点约 1.5 秒后自动保存</div>
 </header>
 <main id="list"></main>
 <script type="module">
@@ -76,7 +83,12 @@ for (const sec of tl.sections) {
   }));
 }
 
-const list = $('list'); const spans = []; let cur = 0, rate = 50, saveTimer = 0;
+// ---- 界面：每个字一个 span。打点时只重绘受影响的 2 个字，不再整体刷新 ----
+const list = $('list'); const spans = [], smalls = [];
+let cur = 0, playIdx = -1, rate = 50, saveTimer = 0, saving = false, saveAgain = false;
+let doneCount = E.filter((x) => x.done).length;
+const header = document.querySelector('header');
+let followPlay = true;
 let lastSec = null, lastRow = null, rowDiv = null;
 E.forEach((e, i) => {
   if (e.sec !== lastSec) {
@@ -86,26 +98,40 @@ E.forEach((e, i) => {
   if (e.ri !== lastRow) { lastRow = e.ri; rowDiv = document.createElement('div'); rowDiv.className = 'row'; list.appendChild(rowDiv); }
   const s = document.createElement('span'); s.className = 'ch';
   s.innerHTML = `${e.ch}<small></small>`;
-  s.onclick = () => { cur = i; refresh(); au.currentTime = Math.max(0, e.t - 0.3); };
-  rowDiv.appendChild(s); spans.push(s);
+  s.onclick = () => { setCur(i); au.currentTime = Math.max(0, e.t - 0.3); };
+  rowDiv.appendChild(s); spans.push(s); smalls.push(s.querySelector('small'));
 });
 
-function refresh() {
-  E.forEach((e, i) => {
-    const s = spans[i];
-    s.className = 'ch' + (e.done ? ' done' : '') + (i === cur ? ' cur' : '');
-    s.querySelector('small').textContent = e.done ? e.t.toFixed(2) : e.def.toFixed(1);
-  });
-  const e = E[cur];
-  $('cur').innerHTML = e ? `${e.ch}<small>${e.sec.name} · ${e.t.toFixed(2)}s · 第 ${cur + 1} / ${E.length} 字 · 已打点 ${E.filter(x => x.done).length}</small>` : '';
+function paint(i) {
+  const e = E[i];
+  spans[i].className = 'ch' + (e.done ? ' done' : '') + (i === cur ? ' cur' : '') + (i === playIdx ? ' play' : '');
+  smalls[i].textContent = e.done ? e.t.toFixed(2) : e.def.toFixed(1);
 }
-function scrollCur() { const s = spans[cur]; if (s) s.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+function paintHeader() {
+  const e = E[cur];
+  $('cur').innerHTML = e ? `${e.ch}<small>${e.sec.name} · ${e.t.toFixed(2)}s · 第 ${cur + 1} / ${E.length} 字 · 已打点 ${doneCount}</small>` : '';
+}
+// 只在必要时滚动：目标在可视区域内就不动，避免平滑滚动排队造成卡顿
+function follow(s) {
+  if (!s) return;
+  const r = s.getBoundingClientRect();
+  const top = header.getBoundingClientRect().bottom + 10, bottom = innerHeight - 40;
+  if (r.top < top || r.bottom > bottom) s.scrollIntoView({ block: 'center', behavior: 'auto' });
+}
+function setCur(n) {
+  const old = cur; cur = clamp(n, 0, E.length - 1);
+  paint(old); paint(cur); paintHeader(); follow(spans[cur]);
+}
 
-function scheduleSave(msg) {
+// ---- 保存：防抖 1.5 秒，且同一时间只有一个请求在飞 ----
+function scheduleSave() {
   $('status').textContent = '未保存…';
-  clearTimeout(saveTimer); saveTimer = setTimeout(save, 1000);
+  clearTimeout(saveTimer); saveTimer = setTimeout(save, 1500);
 }
 async function save() {
+  clearTimeout(saveTimer);
+  if (saving) { saveAgain = true; return; }
+  saving = true;
   const times = {}, done = [];
   E.forEach((e) => { times[e.key] = +e.t.toFixed(3); if (e.done) done.push(e.key); });
   const payload = { version: 1, song: 'GhostChain', updated: new Date().toISOString(), times, done };
@@ -117,20 +143,25 @@ async function save() {
   } catch (e) {
     $('status').textContent = '没有连接到本地服务（请用 play_MV.bat 启动），已存入浏览器缓存';
   }
+  saving = false;
+  if (saveAgain) { saveAgain = false; scheduleSave(); }
 }
 
 function tap() {
   const e = E[cur];
+  if (!e.done) doneCount++;
   e.t = +au.currentTime.toFixed(3); e.done = true;
-  if (cur < E.length - 1) cur++;
-  refresh(); scrollCur(); scheduleSave();
+  setCur(cur + 1);
+  scheduleSave();
 }
 function undo() {
-  if (cur > 0) cur--;
-  const e = E[cur]; e.done = false; e.t = e.def;
-  refresh(); scrollCur(); scheduleSave();
+  if (cur > 0) setCur(cur - 1);
+  const e = E[cur];
+  if (e.done) doneCount--;
+  e.done = false; e.t = e.def;
+  paint(cur); paintHeader(); scheduleSave();
 }
-function move(d) { cur = clamp(cur + d, 0, E.length - 1); refresh(); scrollCur(); }
+function move(d) { setCur(cur + d); }
 function back() { const e = E[cur]; au.currentTime = Math.max(0, e.t - 1); au.play(); }
 function setRate(v) {
   rate = clamp(Math.round(v / 5) * 5, 30, 100);
@@ -139,11 +170,30 @@ function setRate(v) {
 }
 function togglePlay() { au.paused ? au.play() : au.pause(); }
 
+// ---- 播放时高亮正在唱的字：只在换字时重绘两个字 ----
+function updatePlay() {
+  const now = au.currentTime;
+  let p = playIdx < 0 ? 0 : playIdx;
+  while (p < E.length - 1 && E[p + 1].t <= now) p++;
+  while (p >= 0 && E[p].t > now) p--;
+  if (p === playIdx) return;
+  const old = playIdx; playIdx = p;
+  if (old >= 0) paint(old);
+  if (p >= 0) {
+    paint(p);
+    $('now').textContent = `正在播放：${E[p].ch}  （${E[p].sec.name} · ${E[p].t.toFixed(2)}s）`;
+    if (followPlay) follow(spans[p]);
+  } else {
+    $('now').textContent = '';
+  }
+}
+
 $('play').onclick = togglePlay;
 $('tap').onclick = tap;
 $('undo').onclick = undo;
 $('back').onclick = back;
 $('save').onclick = save;
+$('follow').onchange = (ev) => { followPlay = ev.target.checked; };
 $('rate').oninput = (ev) => setRate(+ev.target.value);
 $('export').onclick = () => {
   const times = {}; E.forEach((e) => { times[e.key] = +e.t.toFixed(3); });
@@ -153,6 +203,10 @@ $('export').onclick = () => {
 
 addEventListener('keydown', (ev) => {
   if (ev.target.tagName === 'INPUT') return;
+  // 焦点在按钮上时按 Enter/Space 会同时触发按钮点击，导致一次打两个字，这里先让按钮失焦
+  if (ev.target.tagName === 'BUTTON') ev.target.blur();
+  // 长按 Enter / Backspace 的自动重复不处理，避免一下子打出一串错误的时间点
+  if (ev.repeat && (ev.code === 'Enter' || ev.code === 'Backspace')) { ev.preventDefault(); return; }
   switch (ev.code) {
     case 'Space': ev.preventDefault(); togglePlay(); break;
     case 'Enter': ev.preventDefault(); tap(); break;
@@ -167,13 +221,20 @@ addEventListener('keydown', (ev) => {
   }
 });
 
+let lastPos = '', lastBar = -1;
 function loop() {
-  $('pos').textContent = au.currentTime.toFixed(2) + 's';
-  $('dur').textContent = isFinite(au.duration) ? au.duration.toFixed(2) + 's' : '--';
-  $('bar').firstElementChild.style.width = (isFinite(au.duration) ? au.currentTime / au.duration * 100 : 0) + '%';
+  const pos = au.currentTime.toFixed(2) + 's';
+  if (pos !== lastPos) { $('pos').textContent = pos; lastPos = pos; }
+  const dur = isFinite(au.duration) ? au.duration.toFixed(2) + 's' : '--';
+  if ($('dur').textContent !== dur) $('dur').textContent = dur;
+  const bar = isFinite(au.duration) ? au.currentTime / au.duration * 100 : 0;
+  if (Math.abs(bar - lastBar) > 0.05) { $('bar').firstElementChild.style.width = bar + '%'; lastBar = bar; }
+  updatePlay();
   requestAnimationFrame(loop);
 }
-setRate(50); refresh(); loop();
-$('status').textContent = `已加载 ${E.length} 个字，已打点 ${E.filter(x => x.done).length} 个。从第 1 个字开始；空格播放，Enter 打点。`;
+setRate(50);
+for (let i = 0; i < E.length; i++) paint(i);
+paintHeader(); loop();
+$('status').textContent = `已加载 ${E.length} 个字，已打点 ${doneCount} 个。从第 1 个字开始；空格播放，Enter 打点。`;
 </script>
 </body></html>

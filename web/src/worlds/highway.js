@@ -65,22 +65,36 @@ export function create(ctx) {
     grid.material.uniforms.uTime.value = t; grid.material.uniforms.uSpeed.value = M.speed; grid.material.uniforms.uCam.value.copy(camera.position); grid.material.uniforms.uPulse.value = f.kick;
     // 拱门向镜头飞来
     arches.forEach((m, i) => { m.position.z = ((i * SPACING + t * M.speed) % TOTAL) - (TOTAL - 22); m.rotation.z = 0; });
+    // 副歌1（40.8s 起）：飞行漫游。镜头真正向太阳方向前进，左右、高度、俯仰一起起伏；歌词字形跟随镜头平移，保持位置不变
+    const fly = sec.id === 'chorus1' ? 1 : 0;
+    const fu = clamp(S.lt / Math.max(0.001, sec.end - sec.start), 0, 1);
+    const adv = fly * 100 * (0.5 * fu + 0.5 * fu * fu);                       // 前进距离（向 -z），末段加速
+    const sway = fly * (Math.sin(S.lt * 0.37) * 5.5 + Math.sin(S.lt * 0.9 + 1.3) * 1.1);   // 左右漫游
+    const lift = fly * (2.6 * Math.sin(S.lt * 0.55 + 0.5) + 1.8 * fu);        // 高度起伏
     // 假名
     const flat = k.flat, ci = k.i, ch = ci >= 0 ? flat[ci] : null;
     const age = ci >= 0 ? k.age : 9, pop = Math.exp(-age * 6);
     const sc = M.hero * (1 + pop * 0.28 + f.kick * 0.06);
     for (const b of [heroF, heroO, heroOP]) { b.group.visible = !!ch; b.group.traverse(topLayer); }
     if (ch && ch in heroF.map) {
-      const a = heroF.show(ch, 0.26 + 0.12 * pop); a.scale.setScalar(sc); a.position.set(0, -1 + sc * 0.25 + Math.sin(t * 0.9) * 0.3, -52);
-      const b = heroO.show(ch, 0.55); b.scale.setScalar(sc * 1.07); b.position.set(0.5 + pop * 0.8, -1.2 + sc * 0.25, -53);
-      const c = heroOP.show(ch, 0.32); c.scale.setScalar(sc * 1.16); c.position.set(-0.7 - pop * 1.0, -0.8 + sc * 0.25, -54);
+      // 字形与镜头同步平移（gx/gy/gz 为副歌1的镜头位移），屏幕位置与大小保持不变
+      const gx = sway, gy = lift, gz = -adv;
+      const a = heroF.show(ch, 0.26 + 0.12 * pop); a.scale.setScalar(sc); a.position.set(gx, -1 + sc * 0.25 + Math.sin(t * 0.9) * 0.3 + gy, -52 + gz);
+      const b = heroO.show(ch, 0.55); b.scale.setScalar(sc * 1.07); b.position.set(gx + 0.5 + pop * 0.8, -1.2 + sc * 0.25 + gy, -53 + gz);
+      const c = heroOP.show(ch, 0.32); c.scale.setScalar(sc * 1.16); c.position.set(gx - 0.7 - pop * 1.0, -0.8 + sc * 0.25 + gy, -54 + gz);
     }
-    eyesF.update(t, camera, { opacity: sec.mode === 'pre' ? 0 : sec.mode === 'chorus' ? 0.7 : 0.9, appear: sec.mode === 'pre' ? 0 : smooth(0.05, 0.6, S.p), kick: f.kick });
+    eyesF.update(t, camera, { opacity: sec.id === 'chorus1' ? 0 : sec.mode === 'pre' ? 0 : sec.mode === 'chorus' ? 0.7 : 0.9, appear: sec.mode === 'pre' ? 0 : smooth(0.05, 0.6, S.p), kick: f.kick });
     cf.update(t, f); bf.update(t, f);
     // 相机
     camera.fov = 60 + f.kick * 2.2 + (sec.mode === 'apex' ? 4 : 0); camera.updateProjectionMatrix();
-    camera.position.set(Math.sin(t * 0.33) * 1.6, 2.4 + Math.sin(t * 0.5) * 0.15 + f.kick * 0.1, 14);
-    camera.lookAt(Math.sin(t * 0.21) * 2, 6.0 + Math.sin(t * 0.17) * 0.7, -80); camera.rotation.z += Math.sin(t * 0.4) * 0.025;
+    camera.position.set(Math.sin(t * 0.33) * 1.6 + sway, 2.4 + Math.sin(t * 0.5) * 0.15 + f.kick * 0.1 + lift, 14 - adv);
+    if (fly) {
+      const tx = Math.sin(S.lt * 0.25) * 4, ty = lerp(6, sun.position.y, fu) + Math.sin(S.lt * 0.4) * 1.2;
+      camera.lookAt(tx, ty, sun.position.z);
+    } else {
+      camera.lookAt(Math.sin(t * 0.21) * 2, 6.0 + Math.sin(t * 0.17) * 0.7, -80);
+    }
+    camera.rotation.z += Math.sin(t * 0.4) * 0.025 + fly * Math.sin(S.lt * 0.7) * 0.05;
     const s = post.s; s.bloom = M.bloom + f.kick * 0.2; s.bloomT = 0.8; s.glitch = Math.max(s.glitch, f.hit * M.glitch); s.ab = 0.0028 + f.hit * 0.0025 + f.kick * 0.001; s.warp = 0.05; s.track = 0.25; s.scan = 0.1;
     if (sec.mode === 'apex') s.flash = [f.kick * 0.05, f.kick * 0.012, f.kick * 0.03];
   }

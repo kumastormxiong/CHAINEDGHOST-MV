@@ -7,7 +7,7 @@ import { PAL, col, glowSprite, rng, smooth, lerp, clamp } from '../lib.js';
 import { makeLyricLayer } from '../cyber.js';
 import { makeDNA } from '../dna.js';
 
-const HALF = 60, GRID = 1.2;
+const HALF = 300, GRID = 1.2;   // 板子范围加大，保证电路铺满整个画面（含上方两角）
 const snap = (v) => Math.round(v / GRID) * GRID;
 const clampH = (v) => Math.max(-HALF, Math.min(HALF, v));
 const dummy = new THREE.Object3D();
@@ -17,7 +17,7 @@ function boardTexture() {
   g.fillStyle = '#04150c'; g.fillRect(0, 0, S, S);
   g.strokeStyle = 'rgba(80,255,170,0.09)'; g.lineWidth = 2;
   for (let i = 0; i <= S; i += S / 40) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i, S); g.stroke(); g.beginPath(); g.moveTo(0, i); g.lineTo(S, i); g.stroke(); }
-  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(4, 4);
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(18.1, 18.1);
   return tex;
 }
 
@@ -27,7 +27,12 @@ function dieTexture() {
   g.strokeStyle = 'rgba(63,246,255,0.35)'; g.lineWidth = 2;
   for (let i = 0; i <= S; i += 16) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i, S); g.stroke(); g.beginPath(); g.moveTo(0, i); g.lineTo(S, i); g.stroke(); }
   g.strokeStyle = '#ff2f8f'; g.lineWidth = 8; g.strokeRect(24, 24, S - 48, S - 48);
-  // 芯片中间的字：Michroma 科技感字体，字号自动缩放，保证不超出芯片边框
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; return tex;
+}
+
+// 芯片中央的 GHOST 字样：单独一层透明贴图，便于闪烁浮现
+function labelTexture() {
+  const S = 512, cv = document.createElement('canvas'); cv.width = cv.height = S; const g = cv.getContext('2d');
   let fs = 92; g.font = `400 ${fs}px Michroma, sans-serif`; if ('letterSpacing' in g) g.letterSpacing = '8px';
   while (g.measureText('GHOST').width > 380 && fs > 24) { fs -= 4; g.font = `400 ${fs}px Michroma, sans-serif`; }
   g.textAlign = 'center'; g.textBaseline = 'middle'; g.shadowColor = '#3ff6ff'; g.shadowBlur = 18;
@@ -36,17 +41,17 @@ function dieTexture() {
 }
 
 export function create(ctx) {
-  const scene = new THREE.Scene(); scene.background = col(0x010a06); scene.fog = new THREE.FogExp2(0x010a06, 0.006);
+  const scene = new THREE.Scene(); scene.background = col(0x010a06); scene.fog = new THREE.FogExp2(0x010a06, 0.0018);
   const camera = new THREE.PerspectiveCamera(55, 16 / 9, 0.1, 400);
   const R = rng(404);
 
   // 板子（深绿基材 + 网格纹理）
-  const board = new THREE.Mesh(new THREE.PlaneGeometry(HALF * 2 + 30, HALF * 2 + 30), new THREE.MeshBasicMaterial({ map: boardTexture(), toneMapped: false }));
+  const board = new THREE.Mesh(new THREE.PlaneGeometry(HALF * 2 + 400, HALF * 2 + 400), new THREE.MeshBasicMaterial({ map: boardTexture(), toneMapped: false }));
   board.rotation.x = -Math.PI / 2; board.position.y = -0.5; scene.add(board);
 
   // 走线：正交折线（曼哈顿路由）
   const traces = [];
-  for (let i = 0; i < 300; i++) {
+  for (let i = 0; i < 6400; i++) {
     let x = snap((R() - 0.5) * 2 * HALF), z = snap((R() - 0.5) * 2 * HALF);
     const pts = [[x, z]]; let horiz = R() < 0.5;
     const steps = 3 + Math.floor(R() * 7);
@@ -90,7 +95,7 @@ export function create(ctx) {
 
   // 芯片与引脚
   const CHIPS = [];
-  for (let i = 0; i < 52; i++) {
+  for (let i = 0; i < 1000; i++) {
     const cx = snap((R() - 0.5) * 2 * (HALF - 6)), cz = snap((R() - 0.5) * 2 * (HALF - 6));
     if (Math.abs(cx) < 12 && Math.abs(cz) < 12) continue;
     CHIPS.push({ cx, cz, w: 2.4 + Math.floor(R() * 4) * 1.2, d: 1.8 + Math.floor(R() * 3) * 1.2, pins: 4 + Math.floor(R() * 5) * 2 });
@@ -112,7 +117,7 @@ export function create(ctx) {
 
   // 电容（银色小圆柱）
   const CAPS = [];
-  for (let i = 0; i < 100; i++) CAPS.push([snap((R() - 0.5) * 2 * (HALF - 3)), snap((R() - 0.5) * 2 * (HALF - 3)), R() < 0.5 ? 0 : Math.PI / 2]);
+  for (let i = 0; i < 2300; i++) CAPS.push([snap((R() - 0.5) * 2 * (HALF - 3)), snap((R() - 0.5) * 2 * (HALF - 3)), R() < 0.5 ? 0 : Math.PI / 2]);
   const capGeo = new THREE.CylinderGeometry(0.16, 0.16, 0.42, 8); capGeo.rotateZ(Math.PI / 2);
   const caps = new THREE.InstancedMesh(capGeo, new THREE.MeshBasicMaterial({ color: 0xbfd0d8, toneMapped: false }), CAPS.length);
   CAPS.forEach(([x, z, ry], i) => { dummy.position.set(x, 0.16, z); dummy.rotation.set(0, ry, 0); dummy.scale.set(1, 1, 1); dummy.updateMatrix(); caps.setMatrixAt(i, dummy.matrix); });
@@ -122,6 +127,9 @@ export function create(ctx) {
   const die = new THREE.Group(); scene.add(die);
   const pkg = new THREE.Mesh(new THREE.BoxGeometry(16, 0.9, 16), new THREE.MeshBasicMaterial({ color: 0x07090c, toneMapped: false })); pkg.position.y = 0.45; die.add(pkg);
   const lid = new THREE.Mesh(new THREE.BoxGeometry(11, 0.25, 11), new THREE.MeshBasicMaterial({ map: dieTexture(), toneMapped: false })); lid.position.y = 1.02; die.add(lid);
+  const label = new THREE.Mesh(new THREE.PlaneGeometry(11, 11), new THREE.MeshBasicMaterial({ map: labelTexture(), transparent: true, depthWrite: false, toneMapped: false }));
+  label.rotation.x = -Math.PI / 2; label.position.y = 1.16; label.material.opacity = 0; die.add(label);
+  const labelTex = label.material.map;
   const DP = [];
   for (let s = 0; s < 4; s++) for (let j = 0; j < 24; j++) {
     const u = -7.5 + (j + 0.5) * (15 / 24);
@@ -130,7 +138,9 @@ export function create(ctx) {
   }
   const dpMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.22, 0.12, 0.7), new THREE.MeshBasicMaterial({ color: 0xffd98a, toneMapped: false }), DP.length);
   scene.add(dpMesh);
-  const core = glowSprite('63,246,255', 34, 0.3); core.position.set(0, 1.6, 0); scene.add(core);
+  const core = glowSprite('63,246,255', 34, 0.3); core.rotation.x = -Math.PI / 2; core.position.set(0, 1.6, 0); scene.add(core);
+  // Large diffusion glow that spreads when GHOST emerges (flat, above the chip)
+  const burst = glowSprite('127,249,255', 30, 0); burst.rotation.x = -Math.PI / 2; burst.position.set(0, 1.4, 0); scene.add(burst);
 
   // 上方的全息环（绕处理器旋转）
   const holoG = new THREE.Group(); holoG.position.y = 5.5; scene.add(holoG);
@@ -146,7 +156,7 @@ export function create(ctx) {
   const scan = glowSprite('63,246,255', 120, 0.22); scan.rotation.x = -Math.PI / 2; scan.scale.set(1, 0.1, 1); scan.position.y = 2; scene.add(scan);
 
   // 信号脉冲：沿走线奔跑
-  const P = 380;
+  const P = 1400;
   const pulses = []; for (let i = 0; i < P; i++) pulses.push({ tr: Math.floor(R() * TR.length), ph: R(), sp: 10 + R() * 18 });
   const pulseMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1.6, 0.16, 0.16), new THREE.MeshBasicMaterial({ toneMapped: false, blending: THREE.AdditiveBlending, depthWrite: false }), P);
   for (let i = 0; i < P; i++) pulseMesh.setColorAt(i, new THREE.Color(i % 2 ? PAL.cyan : 0xffd98a).multiplyScalar(2.2));
@@ -192,11 +202,24 @@ export function create(ctx) {
     core.material.opacity = 0.25 + f.kick * 0.25;
 
     holoG.rotation.y = t * 0.5; holo.material.opacity = 0.5 + f.kick * 0.3; holo2.material.opacity = 0.3 + f.kick * 0.25;
-    scan.position.z = ((t * 14) % 150) - 75; scan.material.opacity = 0.18 + f.kick * 0.1;
+    scan.position.z = ((t * 14) % 150) - 75; scan.material.opacity = 0.18 + f.kick * 0.1; scan.visible = sec.id !== 'cpu';   // 74.5s 段不要扫描光带
+    // 74.5s 段只保留电路，不出现锁链双螺旋（cpu2 段保留）
+    dna.group.visible = sec.id !== 'cpu';
     dna.update(t, f, smooth(0.12, 0.6, S.p || 0));
+    // 芯片中央 GHOST：74.5s 段内闪烁并浮现；其余段保持显示
+    const rev = sec.id === 'cpu' ? smooth(0.6, 3.0, S.lt || 0) : 1;
+    const rnd = (n) => { const q = Math.sin(n * 127.1 + 311.7) * 43758.5453; return q - Math.floor(q); };
+    const on = sec.id === 'cpu' ? (rnd(Math.floor(t * 16)) > 0.35 * (1 - rev) ? 1 : 0.12) : 1;
+    const lt0 = S.lt || 0, isC = sec.id === 'cpu' ? 1 : 0;
+    const grow = isC * Math.min(1, Math.max(0, (lt0 - 0.5) / 3.0)), shrink = isC * Math.min(1, Math.max(0, (lt0 - 3.5) / 1.1));   // bloom: linear rise from 1:15, slow partial shrink from 1:18 (never fully back)
+    const pk = grow * (1 - 0.4 * shrink);
+    const dimK = isC * smooth(0.3, 1.2, lt0);   // GHOST stays washed out until the scene ends
+    burst.material.opacity = 0.9 * pk; burst.scale.setScalar(0.6 + 2.9 * pk);
+    label.material.opacity = rev * on * (1 - 0.92 * dimK);   // glow washes the label out
+    label.scale.setScalar(1 + (1 - rev) * 0.06);
     lyr.update(k, t, f);
 
-    const s = post.s; s.bloom = 0.42 + f.kick * 0.22; s.glitch = Math.max(s.glitch, f.hit * 0.3); s.ab = 0.002 + f.hit * 0.004; s.scan = 0.1; s.track = 0.2;
+    const s = post.s; s.bloom = 0.42 + f.kick * 0.22 + 1.4 * pk; s.glitch = Math.max(s.glitch, f.hit * 0.3); s.ab = 0.002 + f.hit * 0.004; s.scan = 0.1; s.track = 0.2;
   }
   return { scene, camera, update };
 }

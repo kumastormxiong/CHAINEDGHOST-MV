@@ -1,42 +1,35 @@
-
-// 场景 endcard：落版。只有你的头像和「虚空造物」。红蓝光圈为平面光环：不倾斜、不前后翻转，只转动、呼吸缩放与流动光带，全部在头像外侧。拖影为连续的梦幻渐变。
+// 场景 endcard：落版。只有你的头像和「虚空造物」。头像外侧是一圈随音乐跳动的频谱直方图：
+// 32 个频段左右对称成 64 根，底部为低频、顶部为高频；整圈随低频与鼓点轻微放大缩小。
 import * as THREE from 'three';
-import { PAL, col, JP_FONT, makeStars, makeGrid, glowSprite, textMesh, smooth, clamp } from '../lib.js';
+import { PAL, col, JP_FONT, makeStars, makeGrid, glowSprite, textMesh, smooth } from '../lib.js';
 
-// 平面光圈着色器：圆环形光带（中心半径 uR，宽度 uW）+ 沿圆周流动的光带 + 扫描亮点（加法混合，不写深度）
-const ringMat = (c, a, R) => new THREE.ShaderMaterial({
-  uniforms: { uT: { value: 0 }, uA: { value: a }, uC: { value: col(c).multiplyScalar(0.85) }, uK: { value: 0 }, uR: { value: R }, uW: { value: 0.09 } },
-  vertexShader: 'varying vec2 vP;varying vec3 vW;void main(){vP=position.xy;vW=(modelMatrix*vec4(position,1.0)).xyz;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
-  fragmentShader: `uniform float uT,uA,uK,uR,uW;uniform vec3 uC;varying vec2 vP;varying vec3 vW;
-    void main(){
-      if(length(vW.xy-vec2(0.0,2.6))<3.3) discard;   // 头像范围内不画光圈，只在头像外侧动画
-      float d=abs(length(vP)-uR);
-      float band=exp(-d*d/(uW*uW*2.0))+0.22*exp(-d*d/0.6);
-      float ang=atan(vP.y,vP.x);
-      float flow=0.5+0.5*sin(ang*84.0-uT*3.2+sin(ang*9.0+uT)*2.0);
-      float spark=smoothstep(0.92,1.0,0.5+0.5*sin(ang*36.0-uT*5.5));
-      vec3 c=uC*band*((0.5+0.35*flow)+spark*0.35+uK*0.3);
-      gl_FragColor=vec4(c,uA*band*(0.85+0.15*flow));
-    }`,
-  transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
-});
+const BANDS = 32;     // 每半圈的频段数，整圈共 64 根
+const R0 = 4.0;       // 直方图内圈半径（头像圆盘约 3.6，留出间隙）
+const HMAX = 0.8;     // 直方图最大长度（外圈约 4.8，在平面范围 5.8 之内）
+const CY = 2.6;       // 头像与直方图的中心高度
 
-// 拖影着色器：在光圈内侧拉出一段连续渐变的光带（粉 ↔ 青 沿圆周与时间平滑混合，亮度沿长度渐隐），无分层边界
-const trailMat = (c1, c2, a, R, L) => new THREE.ShaderMaterial({
-  uniforms: { uT: { value: 0 }, uK: { value: 0 }, uA: { value: a }, uC1: { value: col(c1).multiplyScalar(0.8) }, uC2: { value: col(c2).multiplyScalar(0.8) }, uR: { value: R }, uL: { value: L } },
-  vertexShader: 'varying vec2 vP;varying vec3 vW;void main(){vP=position.xy;vW=(modelMatrix*vec4(position,1.0)).xyz;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
-  fragmentShader: `uniform float uT,uA,uR,uL;uniform vec3 uC1,uC2;varying vec2 vP;varying vec3 vW;
+// 频谱着色器：每个片元先算出所在角度对应的频段，再取该频段的振幅画一根径向直方柱
+const specMat = (vals) => new THREE.ShaderMaterial({
+  uniforms: { uB: { value: vals }, uA: { value: 0 }, uCLo: { value: col(PAL.pink) }, uCHi: { value: col(PAL.cyan) }, uR0: { value: R0 }, uHM: { value: HMAX } },
+  vertexShader: 'varying vec2 vP;void main(){vP=position.xy;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
+  fragmentShader: `uniform float uB[${BANDS}];uniform float uA,uR0,uHM;uniform vec3 uCLo,uCHi;varying vec2 vP;
     void main(){
-      if(length(vW.xy-vec2(0.0,2.6))<3.3) discard;   // 头像范围内不画
-      float d=length(vP)-uR;                            // 负值为光圈内侧
-      float x=clamp(-d/uL,0.0,1.0);                     // 0 贴近光圈，1 为拖影末端
+      float r=length(vP);
       float ang=atan(vP.y,vP.x);
-      float inside=step(d,0.0)*(1.0-x)*(1.0-x);
-      float edge=exp(-d*d*60.0)*0.6;
-      float band=inside+edge;
-      float m=0.5+0.5*sin(ang*2.0+uT*0.9+x*3.0);        // 连续的梦幻色相过渡
-      vec3 c=mix(uC1,uC2,m)*band*(0.75+0.25*sin(x*9.0-uT*2.0));
-      gl_FragColor=vec4(c,uA*band);
+      float s=abs(fract(ang/6.2831853+0.25)*2.0-1.0);          // 0 在顶部，1 在底部，左右对称
+      float fb=clamp((1.0-s)*${BANDS}.0,0.0,${BANDS}.0-0.001); // 底部为低频（0），顶部为高频
+      float bi=floor(fb), bf=fract(fb);
+      float v=0.0;
+      for(int i=0;i<${BANDS};i++){ if(float(i)==bi) v=uB[i]; }
+      float h=max(0.035,v)*uHM;                                 // 静音时保留一小截底座
+      float rr=r-uR0;
+      float inside=smoothstep(-0.03,0.0,rr)*(1.0-smoothstep(h-0.03,h,rr));
+      float gap=smoothstep(0.18,0.26,bf)*(1.0-smoothstep(0.74,0.82,bf));
+      float cap=smoothstep(h*0.5,h,rr);                         // 柱顶更亮
+      vec3 bc=mix(uCLo,uCHi,bi/${BANDS}.0)*(0.5+0.9*v+0.45*cap);
+      float base=exp(-rr*rr*1400.0)*0.55;                       // 内圈细线，标出圆盘边缘
+      vec3 fc=bc*1.35*inside*gap+mix(uCLo,uCHi,0.5)*base;       // 略微提亮，让柱子超过泛光阈值、保留霓虹光晕
+      gl_FragColor=vec4(fc*uA,1.0);
     }`,
   transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
 });
@@ -48,53 +41,38 @@ export function create(ctx) {
   const grid = makeGrid({ y: -6.5, speed: 3, scale: 3, colA: PAL.magenta, colB: PAL.cyan }); grid.material.uniforms.uFog.value = 0.035; scene.add(grid);
   const hz = glowSprite('255,47,143', 120, 0.3); hz.scale.set(1.8, 0.2, 1); hz.position.set(0, -5.2, -40); scene.add(hz);
 
-  const halo = glowSprite('255,70,170', 20, 0.55); halo.position.set(0, 2.6, -1); scene.add(halo);
+  const halo = glowSprite('255,70,170', 20, 0.55); halo.position.set(0, CY, -1); scene.add(halo);
   const haloC = glowSprite('63,246,255', 15, 0.3); haloC.position.set(1.2, 2.2, -1.2); scene.add(haloC);
-  // 头像不写深度：光圈从它旁边经过时不会被方形边缘切掉
-  const avatar = new THREE.Mesh(new THREE.PlaneGeometry(7.2, 7.2), new THREE.MeshBasicMaterial({ map: ctx.avatarTex, transparent: true, toneMapped: false, color: 0x8c88a8, depthWrite: false })); avatar.position.set(0, 2.6, 0); scene.add(avatar);
+  // 头像：参与泛光与后期处理（扫描线、颗粒、暗角）；不写深度，直方图从它旁边经过时不会被方形边缘切掉
+  const avatar = new THREE.Mesh(new THREE.PlaneGeometry(7.2, 7.2), new THREE.MeshBasicMaterial({ map: ctx.avatarTex, transparent: true, toneMapped: false, depthWrite: false })); avatar.position.set(0, CY, 0); scene.add(avatar);
 
-  // 平面光圈：与头像同一平面（z=0），只做转动与小幅呼吸缩放；缩放后的内圈始终大于头像圆盘半径
-  const RING = { P: { r: 4.05, c: PAL.pink, a: 0.95 }, C: { r: 4.35, c: PAL.cyan, a: 0.6 } };
-  const ringState = (kind, tt) => kind === 'P'
-    ? { rot: [0, 0, tt * 0.22], sc: 1 + 0.035 * Math.sin(tt * 1.1) }
-    : { rot: [0, 0, -tt * 0.26], sc: 1 + 0.03 * Math.sin(tt * 1.3 + 1.7) };
-  // 同一套状态函数驱动光圈本体与拖影（拖影按 lag 滞后）
-  const place = (m, kind, tt, alpha, kick) => {
-    const st = ringState(kind, tt);
-    m.rotation.set(st.rot[0], st.rot[1], st.rot[2]);
-    m.position.set(0, 2.6, 0);
-    m.scale.setScalar(st.sc * (1 + kick * 0.02));
-    m.material.uniforms.uT.value = tt; m.material.uniforms.uA.value = alpha; m.material.uniforms.uK.value = kick;
-  };
-  const ringGeo = new THREE.PlaneGeometry(11.6, 11.6);
-  const ringP = new THREE.Mesh(ringGeo, ringMat(RING.P.c, RING.P.a, RING.P.r)); scene.add(ringP);
-  const ringC = new THREE.Mesh(ringGeo, ringMat(RING.C.c, RING.C.a, RING.C.r)); scene.add(ringC);
-  // 连续梦幻渐变拖影：每个光圈两层，长度与滞后不同，颜色在粉青之间过渡
-  const trails = [
-    { m: new THREE.Mesh(ringGeo, trailMat(PAL.pink, PAL.cyan, 0.4, RING.P.r, 0.6)), kind: 'P', lag: 0.25, a: 0.4 },
-    { m: new THREE.Mesh(ringGeo, trailMat(PAL.pink, PAL.cyan, 0.22, RING.P.r, 0.45)), kind: 'P', lag: 0.6, a: 0.22 },
-    { m: new THREE.Mesh(ringGeo, trailMat(PAL.cyan, PAL.pink, 0.3, RING.C.r, 0.7)), kind: 'C', lag: 0.25, a: 0.3 },
-    { m: new THREE.Mesh(ringGeo, trailMat(PAL.cyan, PAL.pink, 0.16, RING.C.r, 0.5)), kind: 'C', lag: 0.6, a: 0.16 },
-  ];
-  trails.forEach((tr) => scene.add(tr.m));
+  // 频谱直方图：与头像同一平面、中心对齐；数组由 ctx.spec 每帧写入
+  const vals = new Array(BANDS).fill(0);
+  const bars = new THREE.Mesh(new THREE.PlaneGeometry(11.6, 11.6), specMat(vals));
+  bars.position.set(0, CY, 0); scene.add(bars);
+
   const name = textMesh('虚空造物', 1.9, { font: JP_FONT, weight: '900', chrome: true, size: 220, glow: '#ff2f8f', stroke: '#ff2f8f', strokeW: 4, spacing: 36 }, false);
-  name.position.set(0, -2.7, 0); scene.add(name);
-  const nameG = name.clone(); nameG.material = name.material.clone(); nameG.material.blending = THREE.AdditiveBlending; nameG.scale.setScalar(1.012); nameG.position.set(0.05, -2.7, -0.05); scene.add(nameG);
+  name.position.set(0, -3.0, 0); scene.add(name);
+  const nameG = name.clone(); nameG.material = name.material.clone(); nameG.material.blending = THREE.AdditiveBlending; nameG.scale.setScalar(1.012); nameG.position.set(0.05, -3.0, -0.05); scene.add(nameG);
   const veil = new THREE.Mesh(new THREE.PlaneGeometry(14, 8), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0, depthTest: false })); veil.position.set(0, 1.4, 14); veil.renderOrder = 99; scene.add(veil);
 
   function update({ t, f, S, post, sec }) {
     const lt = S.lt, end = sec.end - sec.start;
     const aA = smooth(0.2, 1.8, lt), aN = smooth(1.4, 2.8, lt);
-    avatar.material.opacity = aA; avatar.scale.setScalar(0.94 + 0.06 * smooth(0.2, 2.4, lt) + f.kick * 0.012);
+    const vo = smooth(end - 1.4, end - 0.05, lt);            // 片尾黑场
+    avatar.material.opacity = aA * (1 - vo); avatar.scale.setScalar(0.94 + 0.06 * smooth(0.2, 2.4, lt) + f.kick * 0.012);
     halo.material.opacity = 0.3 * aA + f.kick * 0.06; haloC.material.opacity = 0.18 * aA;
-    place(ringP, 'P', t, 0.95 * aA, f.kick);
-    place(ringC, 'C', t, 0.6 * aA, f.kick);
-    trails.forEach((tr) => place(tr.m, tr.kind, t - tr.lag, tr.a * aA, f.kick));
-    name.material.opacity = aN; nameG.material.opacity = aN * 0.3; name.position.y = -2.7 + Math.sin(t * 0.9) * 0.04; nameG.position.y = name.position.y;
-    veil.material.opacity = smooth(end - 1.4, end - 0.05, lt);
+    // 频谱：读取当前时刻的 32 个频段，写入与着色器共享的数组
+    ctx.spec.at(t, vals);
+    bars.material.uniforms.uA.value = aA * (0.95 + 0.25 * f.kick);
+    // 整圈轻微呼吸，并随低频与鼓点放大缩小；鼓点瞬间有一点抖动
+    bars.scale.setScalar(1 + 0.02 * Math.sin(t * 1.6) + 0.035 * f.low + 0.025 * f.kick);
+    bars.position.set(Math.sin(t * 37.0) * 0.012 * f.hit, CY + Math.cos(t * 29.0) * 0.012 * f.hit, 0);
+    name.material.opacity = aN; nameG.material.opacity = aN * 0.3; name.position.y = -3.0 + Math.sin(t * 0.9) * 0.04; nameG.position.y = name.position.y;
+    veil.material.opacity = vo;
     grid.material.uniforms.uTime.value = t; grid.material.uniforms.uCam.value.copy(camera.position); grid.material.uniforms.uPulse.value = f.kick * 0.3;
     camera.position.x = Math.sin(t * 0.18) * 0.7; camera.lookAt(0, 0.6, 0);
-    const s = post.s; s.bloom = 0.8 + f.kick * 0.15; s.bloomR = 0.7; s.bloomT = 0.75; s.glitch = Math.max(s.glitch, (lt < 2.2 ? (1 - smooth(0.2, 2.2, lt)) * 0.35 : 0) + f.hit * 0.05); s.ab = 0.0022; s.track = 0.25; s.scan = 0.11; s.grain = 0.05;
+    const s = post.s; s.bloom = 0.8 + f.kick * 0.15; s.bloomR = 0.7; s.bloomT = 1.0; s.glitch = Math.max(s.glitch, (lt < 2.2 ? (1 - smooth(0.2, 2.2, lt)) * 0.35 : 0) + f.hit * 0.05); s.ab = 0.0022; s.track = 0.25; s.scan = 0.11; s.grain = 0.05;
   }
   return { scene, camera, update };
 }

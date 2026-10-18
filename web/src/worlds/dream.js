@@ -26,8 +26,8 @@ export function create(ctx) {
   const sky = makeSky(SKY.top, SKY.mid, SKY.hor, { midAt: SKY.midAt, power: SKY.pw }); scene.add(sky);
   scene.add(makeStars(500, 380, 1.3, 61));
 
-  const sun = makeSun(30, 0.8); sun.scale.setScalar(2.2); sun.position.set(0, 40, -170); scene.add(sun);
-  const sunGlow = glowSprite('255,190,150', 380, 0.8); sunGlow.scale.setScalar(2.2); sunGlow.position.set(0, 40, -172); scene.add(sunGlow);
+  const sun = makeSun(30, 0.8); sun.scale.setScalar(2.2); sun.position.set(0, 40, -170); sun.renderOrder = -2; scene.add(sun);
+  const sunGlow = glowSprite('255,190,150', 380, 0.8); sunGlow.scale.setScalar(2.2); sunGlow.position.set(0, 40, -172); sunGlow.renderOrder = -2; scene.add(sunGlow);
 
   const water = new THREE.Mesh(new THREE.PlaneGeometry(1400, 1400), new THREE.ShaderMaterial({
     uniforms: { uTime: { value: 0 }, uCam: { value: new THREE.Vector3() }, uTop: { value: col(SKY.top) }, uMid: { value: col(SKY.mid) }, uHor: { value: col(SKY.hor) } },
@@ -52,6 +52,8 @@ export function create(ctx) {
   const mirror = makeGhost(ctx.girlTex, 25); mirror.scale.y = -1; mirror.position.set(-10, -13.2, -24); mirror.material.uniforms.uFade.value = 0.34; mirror.visible = false; scene.add(mirror);
   const halo = makeChain(110, ctx.env); scene.add(halo.mesh);
   const hang = makeChain(120, ctx.env); scene.add(hang.mesh);
+  // 锁链绘制顺序：晚于太阳/光晕、早于弹窗。锁链不写深度，所以弹窗能盖住锁链，而锁链能盖住太阳和蒸汽波横线
+  for (const c of [halo, hang]) { const m = c.mesh.material; m.depthWrite = false; m.transparent = true; m.needsUpdate = true; c.mesh.renderOrder = -1; }
   const cf = makeCyberField({ n: 30, codes: 6, box: [50, 30, 160], seed: 31 }); scene.add(cf.group);
   scene.add(new THREE.AmbientLight(0xffddee, 0.6));
   const eyesF = ctx.makeEyeField([
@@ -60,7 +62,7 @@ export function create(ctx) {
 
   // 老式系统窗口
   const defs = [
-    { title: 'タマシイ.exe', lines: ['鎖を読み込み中…', 'ゴーストを同期しています'], pos: [9, 6.2, -14], ry: -0.38, w: 8.4, t0: 0.2 },
+    { title: '魂.exe', lines: ['Procesando token…', 'Sincronizando con GHOST…'], pos: [9, 6.2, -14], ry: -0.38, w: 8.4, t0: 0.2 },
     { title: 'ghost.dll', lines: ['0x0000GC', '殻の中に、魂はまだある。'], pos: [-17, 14, -38], ry: 0.3, w: 8, t0: 1.3 },
     { title: 'chain.sys', lines: ['リンク 46 / 46', '接続は切れません'], pos: [19, 16, -50], ry: -0.22, w: 9, t0: 2.4 },
     { title: 'SYSTEM', lines: ['メモリ 0x7FC2 OK', 'ネットワーク接続中'], pos: [-6, 2.5, -20], ry: 0.12, w: 6.4, t0: 3.5 },

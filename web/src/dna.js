@@ -86,7 +86,7 @@ export function makeDNA(env, { height = 14, radius = 3.4, turns = 2.5, links = 1
         vec3 cA = vec3(0.3, 0.95, 1.0), cB = vec3(1.0, 0.3, 0.7);
         vec3 col = mix(cA, cB, clamp(vY + 0.5, 0.0, 1.0));
         float bright = (0.25 + 0.9 * flow + 0.9 * uK) * core;
-        gl_FragColor = vec4(col * bright * 1.6, 1.0);
+        gl_FragColor = vec4(col * bright * 0.9, 1.0);
       }`,
   });
   const rungMesh = new THREE.InstancedMesh(rungGeo, rungMat, rungs);
@@ -96,7 +96,8 @@ export function makeDNA(env, { height = 14, radius = 3.4, turns = 2.5, links = 1
   const ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
 
   // prog：0..1 生长进度（锁链从下往上长出来）
-  function update(t, f = {}, prog = 1) {
+  // link：null 为旧的边上升边长横档；0..1 为上升完成后，横档从下往上一个一个依次链接
+  function update(t, f = {}, prog = 1, link = null) {
     const p = clamp(prog, 0, 1);
     A.layout((u) => point(u, 0, t), { frac: p, scale, samples: 500 });
     B.layout((u) => point(u, Math.PI, t), { frac: p, scale, samples: 500 });
@@ -110,15 +111,19 @@ export function makeDNA(env, { height = 14, radius = 3.4, turns = 2.5, links = 1
     for (let j = 0; j < rungs; j++) {
       const u = (j + 0.5) / rungs;
       let done = false;
-      if (u <= p) {
+      // 横档在螺旋上升到一半之后才开始长出：从 A 锁链向 B 锁链逐渐伸展，越往上越晚长
+      let grow;
+      if (link === null) { const gp = clamp((p - (0.5 + 0.45 * u)) / 0.15, 0, 1); grow = gp * gp * (3 - 2 * gp); }
+      else { const lp = clamp(link * rungs - j, 0, 1); grow = 1 - Math.pow(1 - lp, 3); }   // 每根横档占一段时间，依次由下往上链接
+      if (grow > 0.001) {
         point(u, 0, t, pa); point(u, Math.PI, t, pb);
         dir.subVectors(pb, pa);
         const len = dir.length();
         if (len > 1e-4) {
           dir.divideScalar(len);
-          mid.addVectors(pa, pb).multiplyScalar(0.5);
+          mid.copy(pa).addScaledVector(dir, len * grow * 0.5);
           quat.setFromUnitVectors(qUp, dir);
-          scl.set(rr, len, rr);
+          scl.set(rr, len * grow, rr);
           mtx.compose(mid, quat, scl);
           done = true;
         }
