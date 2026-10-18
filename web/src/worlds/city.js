@@ -83,7 +83,7 @@ export function create(ctx) {
   const bf = makeBlockField({ n: 150, box: [46, 30, 200], seed: 61 }); scene.add(bf.mesh);
   const eyesF = ctx.makeEyeField([
     { pos: [-26, 52, -125], w: 34, iris: 'blue', line: 'pink' }, { pos: [24, 58, -140], w: 40, iris: 'red', line: 'cyan' }, { pos: [-2, 92, -170], w: 50, iris: 'ring_cyan', line: 'pink' },
-    { pos: [-40, 40, -110], w: 20, iris: 'orange', line: 'cyan' }, { pos: [42, 44, -115], w: 22, iris: 'ring_pink', line: 'pink' }, { pos: [0, 40, -100], w: 16, iris: 'blue', line: 'cyan' }
+    { pos: [-36, 60, -110], w: 20, iris: 'orange', line: 'cyan' }, { pos: [38, 63, -117], w: 22, iris: 'ring_pink', line: 'pink' }, { pos: [0, 40, -100], w: 16, iris: 'blue', line: 'cyan' }
   ]); scene.add(eyesF.group);
 
   // 雨
@@ -112,6 +112,8 @@ export function create(ctx) {
     lyr.update(k, t, f); cf.update(t, f); bf.update(t, f);
 
     const noEyes = sec.id === 'verse2' || sec.id === 'pre2';   // 主歌2、预副歌2 暂不出现眼睛
+    // Break 2：只保留中间 4 只眼睛，隐藏两只外侧的眼睛（其他段落不受影响）
+    eyesF.eyes[3].visible = eyesF.eyes[4].visible = sec.id !== 'break2';
     eyesF.update(t, camera, { opacity: noEyes ? 0 : 0.9, appear: pre ? smooth(0, 5, S.lt) : 0.5 * smooth(3, 9, S.lt), kick: f.kick });
     const s = post.s; s.bloom = 0.4 + f.kick * 0.12; s.glitch = Math.max(s.glitch, f.hit * (pre ? 0.3 : 0.18)); s.track = 0.45; s.scan = 0.14; s.ab = 0.003 + f.hit * 0.002; s.warp = 0.06;
   }

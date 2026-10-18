@@ -13,8 +13,8 @@ const wideWidth = (uf) => {
   return turnWidthWide(i) + (turnWidthWide(i + 1) - turnWidthWide(i)) * s;
 };
 
-export function makeDNA(env, { height = 14, radius = 3.4, turns = 2.5, links = 110, spin = 0.5, scale = 0.6, rungs = 18, glowN = 700, wide = false } = {}) {
-  const A = makeChain(links, env), B = makeChain(links, env);
+export function makeDNA(env, { height = 14, radius = 3.4, turns = 2.5, links = 110, spin = 0.5, scale = 0.6, rungs = 18, glowN = 700, wide = false, colorA = 0xe8ecff, colorB = 0xe8ecff, rungGain = 1, rungSat = 1 } = {}) {
+  const A = makeChain(links, env, { color: colorA }), B = makeChain(links, env, { color: colorB });
   A.mesh.frustumCulled = false; B.mesh.frustumCulled = false;
   const group = new THREE.Group(); group.add(A.mesh, B.mesh);
 
@@ -63,7 +63,7 @@ export function makeDNA(env, { height = 14, radius = 3.4, turns = 2.5, links = 1
   const rr = 0.19 * Math.max(1, radius / 3.4);   // 横档半径：比之前粗得多，大尺寸时按比例加粗
   const rungGeo = new THREE.CylinderGeometry(0.5, 0.5, 1, 12, 1, false);   // 单位高度，沿 Y 轴，之后用矩阵拉伸到两根锁链之间
   const rungMat = new THREE.ShaderMaterial({
-    uniforms: { uT: { value: 0 }, uK: { value: 0 } },
+    uniforms: { uT: { value: 0 }, uK: { value: 0 }, uG: { value: rungGain }, uS: { value: rungSat } },
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
     vertexShader: `
       varying float vY; varying float vR; varying float vId;
@@ -74,7 +74,7 @@ export function makeDNA(env, { height = 14, radius = 3.4, turns = 2.5, links = 1
         gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
       }`,
     fragmentShader: `
-      uniform float uT; uniform float uK;
+      uniform float uT; uniform float uK; uniform float uG; uniform float uS;
       varying float vY; varying float vR; varying float vId;
       float hsh(float n){ return fract(sin(n * 91.7) * 43758.5453); }
       void main(){
@@ -85,8 +85,10 @@ export function makeDNA(env, { height = 14, radius = 3.4, turns = 2.5, links = 1
         float core = 0.45 + 0.55 * rim;
         vec3 cA = vec3(0.3, 0.95, 1.0), cB = vec3(1.0, 0.3, 0.7);
         vec3 col = mix(cA, cB, clamp(vY + 0.5, 0.0, 1.0));
+        float gy = dot(col, vec3(0.299, 0.587, 0.114));
+        col = clamp(vec3(gy) + (col - vec3(gy)) * uS, 0.0, 1.0);   // 饱和度：uS > 1 时颜色更鲜艳
         float bright = (0.25 + 0.9 * flow + 0.9 * uK) * core;
-        gl_FragColor = vec4(col * bright * 0.9, 1.0);
+        gl_FragColor = vec4(col * bright * 0.9 * uG, 1.0);   // uG：亮度（泛光强度）增益
       }`,
   });
   const rungMesh = new THREE.InstancedMesh(rungGeo, rungMat, rungs);

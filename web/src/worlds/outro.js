@@ -85,7 +85,7 @@ export function create(ctx) {
     m.visible = false; m.renderOrder = 100 + statics.length; kRoot.add(m);
     statics.push({ nx, ny, sc, spawn, m });
   };
-  const spawnOf = (i) => 172.0 + 1.8 * Math.sqrt(hash(i * 4.1 + 2));   // 2:54 起开始铺满屏幕   // sqrt：早期稀疏，后期密集
+  const spawnOf = (i) => 173.0 + 2.5 * Math.sqrt(hash(i * 4.1 + 2));   // 2:54 起开始铺满屏幕   // sqrt：早期稀疏，后期密集
   const SC = 18, SR = 12, NS = SC * SR;
   for (let r = 0; r < SR; r++) for (let c = 0; c < SC; c++) {          // 满屏网格，位置有轻微随机偏移
     const i = r * SC + c;

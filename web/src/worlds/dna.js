@@ -103,7 +103,7 @@ export function create(ctx) {
   scene.add(new THREE.AmbientLight(0x443355, 1.0));
 
   const grid = makeGrid({ y: -12, speed: 6, scale: 3, colA: PAL.cyan, colB: PAL.magenta }); grid.material.uniforms.uFog.value = 0.02; scene.add(grid);
-  const dna = makeDNA(ctx.env, { height: 36, radius: 6.6, turns: 3.2, links: 240, spin: 0.25, scale: 1.4, wide: true });
+  const dna = makeDNA(ctx.env, { height: 36, radius: 6.6, turns: 3.2, links: 240, spin: 0.25, scale: 1.4, wide: true, rungSat: 1.35, rungGain: 1.25 });
   dna.group.position.set(0, -12, 0); scene.add(dna.group);
   const halo = glowSprite('63,246,255', 60, 0.25); halo.position.set(0, 2, -12); scene.add(halo);
   // 地面：从双螺旋底部向外扩散的波纹、放射线、同心细线，以及扫过的光环（加法叠加，科幻地面纹理）

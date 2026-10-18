@@ -40,12 +40,11 @@ export function create(ctx) {
   const chain = makeChain(320, ctx.env); scene.add(chain.mesh);
   // 参考图的
   scene.add(new THREE.AmbientLight(0x442244, 0.7));
-  // 参考图的满天眼睛：墙后方的夜空里，随歌词推进一只只睁开
+  // 墙后方夜空里的一只大眼睛，从 26 秒（全局时间）起睁开
   const eyesF = ctx.makeEyeField([
-    { pos: [-30, 17, -36], w: 12, iris: 'blue', line: 'pink' }, { pos: [-13, 22, -42], w: 14, iris: 'red', line: 'cyan' }, { pos: [6, 18, -40], w: 10, iris: 'ring_cyan', line: 'pink' },
-    { pos: [25, 20, -38], w: 13, iris: 'orange', line: 'cyan' }, { pos: [38, 12, -32], w: 9, iris: 'blue', line: 'cyan' }, { pos: [-40, 10, -32], w: 9, iris: 'ring_pink', line: 'pink' }, { pos: [-2, 12, -50], w: 17, iris: 'red', line: 'pink' }
+    { pos: [-2, 22, -50], w: 17, iris: 'red', line: 'pink' }
   ]); scene.add(eyesF.group);
-  const beam = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 60), new THREE.MeshBasicMaterial({ color: PAL.cyan, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })); beam.position.z = -6; scene.add(beam);
+  const beam = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 60), new THREE.ShaderMaterial({ uniforms: { uC: { value: new THREE.Color(PAL.cyan) }, uO: { value: 0.35 } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }', fragmentShader: 'uniform vec3 uC; uniform float uO; varying vec2 vUv; void main(){ float d = 1.0 - abs(vUv.x - 0.5) * 2.0; float y = 1.0 - abs(vUv.y - 0.5) * 2.0; float a = pow(smoothstep(0.0, 0.85, d), 1.5) * smoothstep(0.0, 0.3, y) * uO; gl_FragColor = vec4(uC, a); }' })); beam.position.z = -6; scene.add(beam);
 
   function update({ t, f, S, k, post, sec }) {
     const flat = k.flat; build(flat);
@@ -77,7 +76,8 @@ export function create(ctx) {
     camera.lookAt(Math.sin(ang) * -2, 3.4, -2);
     grid.material.uniforms.uTime.value = t; grid.material.uniforms.uCam.value.copy(camera.position); grid.material.uniforms.uPulse.value = f.kick * 0.5;
     beam.position.x = ((t * 6) % 80) - 40; beam.rotation.z = 0.06;
-    eyesF.update(t, camera, { opacity: 0.9, appear: smooth(1.5, 9, S.lt), kick: f.kick });
+    // 24 秒起出现并睁开（约 7.5 秒）；眨眼方式与 Break 1（dream 场景）一致，使用 eyes.js 的默认眨眼
+    eyesF.update(t, camera, { opacity: 0.9, appear: smooth(24, 31.5, t), kick: f.kick });
     dust.forEach((m, i) => { m.position.y = m.userData.y0 + Math.sin(t * m.userData.s + i) * 1.2; });
     const s = post.s; s.bloom = 0.62 + f.kick * 0.22; s.glitch = Math.max(s.glitch, f.hit * 0.18); s.track = 0.35; s.scan = 0.12; s.ab = 0.0024 + f.hit * 0.0016;
   }

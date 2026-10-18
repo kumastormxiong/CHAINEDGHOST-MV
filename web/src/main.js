@@ -24,9 +24,9 @@ const [feat, tl] = await Promise.all([Features.load('./data/features.json'), Tim
 const spec = await Spectrum.load('./data/spectrum.json');
 const loader = new THREE.TextureLoader();
 const ld = (u) => new Promise((res) => loader.load(u, (t) => { t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; res(t); }));
-const [ghostTex, avatarTex, girlTex, eyeT] = await Promise.all([ld('assets/avatar_ghost.png'), ld('assets/avatar_full.png'), ld('assets/girl_ghost.png'), loadEyeTextures()]);
+const [ghostTex, avatarTex, eyeT] = await Promise.all([ld('assets/avatar_ghost.png'), ld('assets/avatar_full.png'), loadEyeTextures()]);
 const ctx = {
-  renderer, W, H, THREE, ghostTex, avatarTex, girlTex, eyeT, tl, feat, spec,
+  renderer, W, H, THREE, ghostTex, avatarTex, eyeT, tl, feat, spec,
   makeEyeField: (specs) => makeEyeField(eyeT, specs),
   env: makeEnv(renderer),
   atlasF: makeAtlas(KANA, 'filled'), atlasO: makeAtlas(KANA, 'outline')

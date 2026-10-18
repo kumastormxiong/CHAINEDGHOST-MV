@@ -83,7 +83,12 @@ export function create(ctx) {
     kR.position.set(-sp * wob, sp * 0.25, 0); kB.position.set(sp * wob, -sp * 0.25, 0);
     const op = (0.5 + 0.12 * Math.sin(t * 4.0)) * (0.9 + f.kick * 0.1);
     kanji.material.opacity = op; kR.material.opacity = op * 0.85; kB.material.opacity = op * 0.85;
-    kg.scale.setScalar(1 + f.kick * 0.04);
+    // 3:51（231 秒）起：魂字抖动并加速放大，到场景结束（234 秒）时放大到 2.9 倍，抖动幅度 1.6，让字逼近光球边缘
+    const q = Math.min(1, Math.max(0, (t - 231) / 3));
+    const grow = 1 + 1.9 * q * q;
+    const shk = q * 1.6;
+    kg.position.set(Math.sin(t * 61) * shk, Math.cos(t * 47) * shk, 0);
+    kg.scale.setScalar((1 + f.kick * 0.04) * grow);
     const s = post.s; s.bloom = 0.22 + f.kick * 0.08; s.glitch = Math.max(s.glitch, f.hit * 0.25); s.ab = 0.002 + f.hit * 0.003; s.track = 0.2; s.scan = 0.1;
   }
   return { scene, camera, update };

@@ -30,13 +30,19 @@ function dieTexture() {
   const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; return tex;
 }
 
+// cpu2 段芯片上循环闪现的「魂」：英文 GHOST 与各语言的词，后备字体覆盖日文、韩文、阿拉伯文、泰文、印地文等
+const WORDS = ['GHOST', '魂', 'タマシイ', '혼', 'Душа', 'Seele', 'âme', 'alma', 'anima', 'روح', 'आत्मा', 'วิญญาณ', 'linh hồn', 'jiwa', 'ψυχή', 'dusza'];
+const LABEL_FONT = 'Michroma, "NotoSC9", "Yu Gothic", "Malgun Gothic", "Segoe UI", "Nirmala UI", "Leelawadee UI", "Microsoft YaHei", sans-serif';
+// 非英文字符用的字体：字重较轻，避免汉字在镜头贴近时糊成块
+const CJK_FONT = '"Microsoft YaHei", "Yu Gothic", "Malgun Gothic", "NotoSC9", "Segoe UI", "Nirmala UI", "Leelawadee UI", sans-serif';
 // 芯片中央的 GHOST 字样：单独一层透明贴图，便于闪烁浮现
-function labelTexture() {
-  const S = 512, cv = document.createElement('canvas'); cv.width = cv.height = S; const g = cv.getContext('2d');
-  let fs = 92; g.font = `400 ${fs}px Michroma, sans-serif`; if ('letterSpacing' in g) g.letterSpacing = '8px';
-  while (g.measureText('GHOST').width > 380 && fs > 24) { fs -= 4; g.font = `400 ${fs}px Michroma, sans-serif`; }
-  g.textAlign = 'center'; g.textBaseline = 'middle'; g.shadowColor = '#3ff6ff'; g.shadowBlur = 18;
-  g.fillStyle = '#7ff9ff'; g.fillText('GHOST', S / 2 + 4, S / 2);
+function labelTexture(text = 'GHOST', S = 512) {
+  const k = S / 512, cv = document.createElement('canvas'); cv.width = cv.height = S; const g = cv.getContext('2d');
+  const latin = /^[\x00-\x7F]*$/.test(text), font = latin ? LABEL_FONT : CJK_FONT;
+  let fs = 92 * k; g.font = `400 ${fs}px ${font}`; if ('letterSpacing' in g) g.letterSpacing = latin ? `${8 * k}px` : '0px';
+  while (g.measureText(text).width > 380 * k && fs > 24 * k) { fs -= 4 * k; g.font = `400 ${fs}px ${font}`; }
+  g.textAlign = 'center'; g.textBaseline = 'middle'; g.shadowColor = '#3ff6ff'; g.shadowBlur = 18 * k;
+  g.fillStyle = '#7ff9ff'; g.fillText(text, S / 2 + 4 * k, S / 2);
   const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; return tex;
 }
 
@@ -128,8 +134,9 @@ export function create(ctx) {
   const pkg = new THREE.Mesh(new THREE.BoxGeometry(16, 0.9, 16), new THREE.MeshBasicMaterial({ color: 0x07090c, toneMapped: false })); pkg.position.y = 0.45; die.add(pkg);
   const lid = new THREE.Mesh(new THREE.BoxGeometry(11, 0.25, 11), new THREE.MeshBasicMaterial({ map: dieTexture(), toneMapped: false })); lid.position.y = 1.02; die.add(lid);
   const label = new THREE.Mesh(new THREE.PlaneGeometry(11, 11), new THREE.MeshBasicMaterial({ map: labelTexture(), transparent: true, depthWrite: false, toneMapped: false }));
-  label.rotation.x = -Math.PI / 2; label.position.y = 1.16; label.material.opacity = 0; die.add(label);
+  label.rotation.x = -Math.PI / 2; label.position.y = 1.16; label.material.opacity = 0; label.renderOrder = 5; die.add(label);   // 画在螺旋的光晕之后，保证文字可读
   const labelTex = label.material.map;
+  const wordTex = WORDS.map((w) => labelTexture(w, 1024));   // cpu2 段循环使用的各语言贴图
   const DP = [];
   for (let s = 0; s < 4; s++) for (let j = 0; j < 24; j++) {
     const u = -7.5 + (j + 0.5) * (15 / 24);
@@ -171,9 +178,12 @@ export function create(ctx) {
       // 低空向前穿行：左右蜿蜒，掠过走线与芯片
       const lt = S.lt;
       const pz = 46 - lt * 2.6, px = Math.sin(lt * 0.6) * 26;
-      camera.position.set(px, 14 + Math.sin(lt * 0.4) * 2.5 + f.kick * 0.4, pz);
-      camera.lookAt(px * 0.5 + Math.sin(lt * 0.9) * 4, 0, pz - 30);
-      camera.rotation.z += Math.sin(lt * 0.7) * 0.05;
+      // 段末（9.5 秒起）：镜头加速俯冲，直接飞向芯片中间的 GHOST 文字，一直飞到场景切换；螺旋在途中收缩消失，避免镜头钻进光晕
+      const g = Math.pow(Math.min(1, Math.max(0, (lt - 9.5) / 5.3)), 2);   // 一直飞到场景切换（约 201 秒）
+      camera.position.set(lerp(px, 0, g), lerp(14 + Math.sin(lt * 0.4) * 2.5, 2.0, g) + f.kick * 0.4, lerp(pz, 1.0, g));
+      camera.lookAt(lerp(px * 0.5 + Math.sin(lt * 0.9) * 4, 0, g), lerp(0, 1.16, g), lerp(pz - 30, 0, g));
+      camera.rotation.z += Math.sin(lt * 0.7) * 0.05 * (1 - g);
+      dna.group.scale.setScalar(1 + 1.2 * smooth(10.5, 14.8, lt));   // 段末螺旋放大
     } else {
       // 绕板子俯冲旋转
       const e = smooth(0, 1, S.p || 0);
@@ -199,7 +209,7 @@ export function create(ctx) {
       dummy.position.set(d.x, 0.2, d.z); dummy.rotation.set(0, d.rotY, 0); dummy.scale.set(1, k2, 1); dummy.updateMatrix(); dpMesh.setMatrixAt(i, dummy.matrix);
     });
     dpMesh.instanceMatrix.needsUpdate = true;
-    core.material.opacity = 0.25 + f.kick * 0.25;
+    core.material.opacity = (0.25 + f.kick * 0.25) * (1 - smooth(10.5, 13.0, S.lt || 0));   // 段末镜头贴近芯片时，中心光晕渐隐
 
     holoG.rotation.y = t * 0.5; holo.material.opacity = 0.5 + f.kick * 0.3; holo2.material.opacity = 0.3 + f.kick * 0.25;
     scan.position.z = ((t * 14) % 150) - 75; scan.material.opacity = 0.18 + f.kick * 0.1; scan.visible = sec.id !== 'cpu';   // 74.5s 段不要扫描光带
@@ -217,6 +227,16 @@ export function create(ctx) {
     burst.material.opacity = 0.9 * pk; burst.scale.setScalar(0.6 + 2.9 * pk);
     label.material.opacity = rev * on * (1 - 0.92 * dimK);   // glow washes the label out
     label.scale.setScalar(1 + (1 - rev) * 0.06);
+    // cpu2 段：芯片上的文字在各语言的「魂」之间快速切换，并且闪烁
+    if (sec.id === 'cpu2') {
+      // 13.4 秒（约 199.6 秒）起锁定为汉字“魂”，镜头贴近芯片时清晰可见
+      const soulLock = (S.lt || 0) >= 13.4;
+      label.material.map = wordTex[soulLock ? 1 : Math.floor(t * 2.6) % WORDS.length];
+      label.material.opacity = soulLock ? 1 : (rnd(Math.floor(t * 18)) > 0.25 ? 1 : 0.15);
+      label.material.color.setScalar(soulLock ? 1 : 2.4);   // 提亮，压过螺旋的光晕；锁定“魂”时用正常亮度，避免文字糊成白块
+    } else {
+      label.material.color.setScalar(1);
+    }
     lyr.update(k, t, f);
 
     const s = post.s; s.bloom = 0.42 + f.kick * 0.22 + 1.4 * pk; s.glitch = Math.max(s.glitch, f.hit * 0.3); s.ab = 0.002 + f.hit * 0.004; s.scan = 0.1; s.track = 0.2;

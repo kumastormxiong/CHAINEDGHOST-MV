@@ -1,6 +1,6 @@
 // 场景 dream：Bridge。梦核/液态蒸汽波：粉橙天空、镜面水面、巨大落日、漂浮的幽灵及其倒影、老式系统窗口、悬浮锁链与假名花瓣。
 import * as THREE from 'three';
-import { PAL, col, KANA, JP_FONT, makeSun, makeSky, makeGhost, glyphMesh, glowSprite, smooth, clamp, lerp, rng, makeStars } from '../lib.js';
+import { PAL, col, KANA, JP_FONT, makeSun, makeSky, glyphMesh, glowSprite, smooth, clamp, lerp, rng, makeStars } from '../lib.js';
 import { makeChain } from '../lib.js';
 import { makeCyberField } from '../cyber.js';
 
@@ -48,8 +48,6 @@ export function create(ctx) {
         gl_FragColor=vec4(c,1.0);}`
   })); water.rotation.x = -Math.PI / 2; scene.add(water);
 
-  const ghost = makeGhost(ctx.girlTex, 25); ghost.position.set(-10, 13.2, -24); ghost.visible = false; scene.add(ghost);
-  const mirror = makeGhost(ctx.girlTex, 25); mirror.scale.y = -1; mirror.position.set(-10, -13.2, -24); mirror.material.uniforms.uFade.value = 0.34; mirror.visible = false; scene.add(mirror);
   const halo = makeChain(110, ctx.env); scene.add(halo.mesh);
   const hang = makeChain(120, ctx.env); scene.add(hang.mesh);
   // 锁链绘制顺序：晚于太阳/光晕、早于弹窗。锁链不写深度，所以弹窗能盖住锁链，而锁链能盖住太阳和蒸汽波横线
@@ -57,8 +55,9 @@ export function create(ctx) {
   const cf = makeCyberField({ n: 30, codes: 6, box: [50, 30, 160], seed: 31 }); scene.add(cf.group);
   scene.add(new THREE.AmbientLight(0xffddee, 0.6));
   const eyesF = ctx.makeEyeField([
-    { pos: [-58, 14, -70], w: 14, iris: 'ring_pink', line: 'pink' }, { pos: [-50, 40, -76], w: 12, iris: 'blue', line: 'cyan' }, { pos: [56, 36, -70], w: 14, iris: 'orange', line: 'pink' }, { pos: [62, 8, -80], w: 16, iris: 'ring_cyan', line: 'cyan' }
+    { pos: [-50, 40, -76], w: 12, iris: 'blue', line: 'cyan' }, { pos: [56, 36, -70], w: 14, iris: 'orange', line: 'pink' }
   ]); scene.add(eyesF.group);
+  eyesF.eyes.forEach((e) => { e.renderOrder = -2; });   // 眼睛画在锁链之下，锁链能挡住眼睛
 
   // 老式系统窗口
   const defs = [
@@ -71,6 +70,7 @@ export function create(ctx) {
     { title: 'NET.cfg', lines: ['接続先 : 0x00000001', '暗号化 : AES-256'], pos: [-3, 19, -44], ry: 0.08, w: 8.2, t0: 6.6 },
     { title: 'chain.log', lines: ['リンク 生成 完了', '魂の署名を確認'], pos: [24, 6, -30], ry: -0.5, w: 7.6, t0: 7.4 }
   ];
+  const WSP = [0.045, 0.06, 0.035, 0.052, 0.04, 0.066, 0.038, 0.055];   // progress speed per window (1/s), each window differs
   const wins = defs.map((d, i) => {
     const tx = winTexture(d.title, d.lines, 0.4); const m = new THREE.Mesh(new THREE.PlaneGeometry(d.w, d.w * 360 / 640), new THREE.MeshBasicMaterial({ map: tx.tex, transparent: true, toneMapped: false, opacity: 0, depthWrite: false }));
     m.position.set(...d.pos); m.rotation.y = d.ry; m.visible = false; scene.add(m); return { m, d, tx, base: new THREE.Vector3(...d.pos) };
@@ -86,12 +86,9 @@ export function create(ctx) {
     water.material.uniforms.uTime.value = t; water.material.uniforms.uCam.value.copy(camera.position);
     sun.material.uniforms.uTime.value = t * 0.5; sun.material.uniforms.uPulse.value = f.kick * 0.5; sunGlow.material.opacity = 0.32 + f.kick * 0.08;
     const fl = Math.sin(t * 0.7) * 0.4;
-    ghost.position.y = 13.2 + fl; mirror.position.y = -(13.2 + fl);
-    ghost.material.uniforms.uTime.value = t; ghost.material.uniforms.uGlitch.value = f.hit * 0.25 + 0.04; ghost.material.uniforms.uA.value.set(0xff7ab8); ghost.material.uniforms.uB.value.set(0xfff0a8);
-    mirror.material.uniforms.uTime.value = t; mirror.material.uniforms.uGlitch.value = 0.12 + f.hit * 0.3; mirror.material.uniforms.uA.value.set(0xff7ab8); mirror.material.uniforms.uB.value.set(0xfff0a8);
     // 幽灵头顶的锁链光环
     halo.layout((u) => { const a = u * Math.PI * 2; return new THREE.Vector3(Math.cos(a) * 13, Math.sin(a) * 13, 0); }, { frac: 1, scale: 0.9, twist: t * 0.3 });
-    halo.mesh.position.set(-10, ghost.position.y, -24.5); halo.mesh.rotation.set(Math.sin(t * 0.2) * 0.25, t * 0.25, 0.2);
+    halo.mesh.position.set(-10, 13.2 + fl, -24.5); halo.mesh.rotation.set(Math.sin(t * 0.2) * 0.25, t * 0.25, 0.2);
     // 从天上垂下来的锁链
     hang.layout((u) => new THREE.Vector3(20 + Math.sin(u * 5 + t * 0.7) * 0.8, 70 - u * 68, -34 + Math.cos(u * 4 + t * 0.5) * 0.8), { frac: 1, scale: 1.1, twist: t * 0.2 });
     const lt = S.lt;
@@ -102,8 +99,13 @@ export function create(ctx) {
       w.m.position.y = w.base.y + Math.sin(t * 0.5 + i * 2) * 0.35 + (1 - a) * 1.2;
       w.m.rotation.y = w.d.ry + Math.sin(t * 0.3 + i) * 0.05;
     });
-    if (Math.floor(t * 3) !== (update.lastP ?? -1)) {      // 进度条每 1/3 秒重绘（只重绘第一块窗口）
-      update.lastP = Math.floor(t * 3); const w0 = wins[0]; const p = (t * 0.07) % 1; const nt = winTexture(w0.d.title, w0.d.lines, p); w0.m.material.map.dispose(); w0.m.material.map = nt.tex; w0.m.material.needsUpdate = true;
+    if (Math.floor(t * 3) !== (update.lastP ?? -1)) {      // redraw every 1/3 s: each window shows its own progress
+      update.lastP = Math.floor(t * 3);
+      wins.forEach((w, i) => {
+        if (!w.m.visible) return;
+        const p = Math.min(0.85, 0.08 + WSP[i] * Math.max(0, lt - w.d.t0)); const nt = winTexture(w.d.title, w.d.lines, p);
+        w.m.material.map.dispose(); w.m.material.map = nt.tex; w.m.material.needsUpdate = true;
+      });
     }
     petals.forEach((m, i) => { const u = m.userData; m.position.set(u.x + Math.sin(t * 0.4 * u.s + u.ph) * 3, ((u.y0 - t * 0.9 * u.s) % 30 + 30) % 30 + 0.5, u.z); m.rotation.z = Math.sin(t * u.s + u.ph) * 0.8; });
     cf.update(t, f);
